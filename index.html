@@ -14,14 +14,38 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Service worker desactivado durante el desarrollo: limpiamos cualquier
-      // registro/caché previo para que nunca se sirva una versión vieja.
+      // Registrar el service worker SOLO en producción (https + dominio real),
+      // para permitir instalar la PWA. En desarrollo (localhost / IP local) se
+      // desregistra y limpia cachés, evitando servir versiones viejas.
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.getRegistrations()
-            .then((regs) => regs.forEach((r) => r.unregister()));
-          if (window.caches) {
-            caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+        var h = location.hostname;
+        var isDev = h === 'localhost' || h === '127.0.0.1' ||
+                    /^192\.168\./.test(h) || /^10\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+        window.addEventListener('load', function () {
+          if (isDev || location.protocol !== 'https:') {
+            navigator.serviceWorker.getRegistrations()
+              .then(function (regs) { regs.forEach(function (r) { r.unregister(); }); });
+            if (window.caches) {
+              caches.keys().then(function (keys) { keys.forEach(function (k) { caches.delete(k); }); });
+            }
+          } else {
+            navigator.serviceWorker.register('/sw.js')
+              .then(function (reg) {
+                console.log('SW registrado:', reg.scope);
+                // Comprobar si hay versión nueva al abrir y cada 60s.
+                reg.update();
+                setInterval(function () { reg.update(); }, 60000);
+              })
+              .catch(function (err) { console.log('SW error:', err); });
+
+            // Cuando un SW nuevo toma el control, recargar una sola vez para
+            // que la pestaña abierta pase a la última versión automáticamente.
+            var refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+              if (refreshing) return;
+              refreshing = true;
+              window.location.reload();
+            });
           }
         });
       }
