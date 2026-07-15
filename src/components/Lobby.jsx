@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
 import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2 } from 'lucide-react';
 
@@ -52,6 +52,18 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
       setBusy(false);
     }
   };
+
+  // Arriving via a shared link (?join=CODE): look up the game automatically and
+  // jump straight to picking a commander — no need to press "Buscar".
+  const autoFound = React.useRef(false);
+  useEffect(() => {
+    if (autoFound.current) return;
+    if (mp.available && initialJoinCode && view === 'join') {
+      autoFound.current = true;
+      doFind();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mp.available, initialJoinCode]);
 
   // Step 2: claim the chosen seat.
   const doClaim = async (seatIndex) => {
@@ -231,6 +243,12 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
     return (
       <Shell onBack={() => { setView('join'); setFoundGame(null); }} title="Elige tu comandante">
         <div className="flex flex-col gap-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Tu nombre (opcional)"
+            className="bg-[#121625] border border-slate-800 text-gray-300 font-mono text-sm p-2 rounded focus:outline-none focus:border-cyan-500 mb-1"
+          />
           <p className="font-mono text-[10px] text-gray-500 mb-1">Selecciona el puesto que vas a controlar:</p>
           {humanSeats.map((s) => {
             const taken = Boolean(s.userId);
