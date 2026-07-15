@@ -16,6 +16,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const [foundGame, setFoundGame] = useState(null); // game row looked up by code
   const linkRef = React.useRef(null);
 
   const game = mp.game;
@@ -37,14 +38,31 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
     }
   };
 
-  const doJoin = async () => {
+  // Step 1: look up the game so the player can pick which commander they are.
+  const doFind = async () => {
     if (!code.trim()) { setLocalError('Escribe el código de la partida.'); return; }
     setBusy(true); setLocalError(null);
     try {
-      await mp.joinGame(code, name || 'Invitado');
+      const row = await mp.findGame(code);
+      setFoundGame(row);
+      setView('pickSeat');
+    } catch (e) {
+      setLocalError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Step 2: claim the chosen seat.
+  const doClaim = async (seatIndex) => {
+    setBusy(true); setLocalError(null);
+    try {
+      await mp.claimSeat(foundGame.id, seatIndex, name || 'Invitado');
       setView('waiting');
     } catch (e) {
       setLocalError(e.message);
+      // Refresh seats so the player sees the up-to-date occupancy.
+      try { setFoundGame(await mp.findGame(code)); } catch { /* ignore */ }
     } finally {
       setBusy(false);
     }
@@ -191,13 +209,53 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
             className="bg-[#121625] border border-slate-800 text-gray-300 font-mono text-sm p-2 rounded focus:outline-none focus:border-cyan-500"
           />
           <button
-            onClick={doJoin}
+            onClick={doFind}
             disabled={busy}
             className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-3 text-sm font-bold mt-1 flex items-center justify-center gap-2"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-            {busy ? 'Conectando…' : 'Unirse'}
+            {busy ? 'Buscando…' : 'Buscar partida'}
           </button>
+          {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
+        </div>
+      </Shell>
+    );
+  }
+
+  // ── Pick which commander you are ──
+  if (view === 'pickSeat' && foundGame) {
+    const fseats = foundGame.state?.seats ?? [];
+    const humanSeats = fseats
+      .map((s, i) => ({ ...s, idx: i }))
+      .filter((s) => s.type === 'human');
+    return (
+      <Shell onBack={() => { setView('join'); setFoundGame(null); }} title="Elige tu comandante">
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-[10px] text-gray-500 mb-1">Selecciona el puesto que vas a controlar:</p>
+          {humanSeats.map((s) => {
+            const taken = Boolean(s.userId);
+            return (
+              <button
+                key={s.idx}
+                onClick={() => !taken && doClaim(s.idx)}
+                disabled={taken || busy}
+                className={`flex items-center gap-3 rounded px-3 py-2.5 border transition-all text-left ${
+                  taken
+                    ? 'border-slate-800 bg-[#0d101a] opacity-50 cursor-not-allowed'
+                    : 'border-cyan-500/40 bg-cyan-950/10 hover:bg-cyan-900/25'
+                }`}
+              >
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: FACTIONS[s.faction]?.neon, flexShrink: 0 }} />
+                <span className="font-tactical text-sm text-white flex-1 truncate">{s.name}</span>
+                <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${taken ? 'text-gray-500 bg-slate-900' : 'text-green-400 bg-green-950/30'}`}>
+                  {taken ? 'Ocupado' : 'Libre'}
+                </span>
+              </button>
+            );
+          })}
+          {humanSeats.every((s) => s.userId) && (
+            <p className="font-mono text-[10px] text-amber-400 text-center mt-1">Todos los puestos humanos están ocupados.</p>
+          )}
           {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
         </div>
       </Shell>

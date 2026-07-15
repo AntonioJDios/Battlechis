@@ -108,12 +108,12 @@ export function useMultiplayer() {
     }
   }, [ensureAuth, subscribe]);
 
-  // ── Join an existing game by code ──
-  const joinGame = useCallback(async (code, playerName) => {
+  // ── Look up a game by code (no changes yet — used to show its seats) ──
+  const findGame = useCallback(async (code) => {
     setConnecting(true);
     setError(null);
     try {
-      const uid = await ensureAuth();
+      await ensureAuth();
       const clean = code.trim().toUpperCase();
       const { data: rows, error: selErr } = await supabase
         .from(TABLE)
@@ -124,12 +124,32 @@ export function useMultiplayer() {
       if (!rows || rows.length === 0) throw new Error('No existe una partida con ese código.');
       const row = rows[0];
       if (row.status !== 'waiting') throw new Error('Esa partida ya ha empezado.');
+      return row;
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    } finally {
+      setConnecting(false);
+    }
+  }, [ensureAuth]);
 
-      // Claim the first free human seat.
-      const seats = row.state?.seats ?? [];
-      const freeIdx = seats.findIndex((s) => s.type === 'human' && !s.userId);
-      if (freeIdx === -1) throw new Error('La partida está completa.');
-      seats[freeIdx] = { ...seats[freeIdx], userId: uid, name: playerName || seats[freeIdx].name };
+  // ── Claim a specific seat in a game (the player picks which commander) ──
+  const claimSeat = useCallback(async (gameId, seatIndex, playerName) => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const uid = await ensureAuth();
+      // Re-fetch fresh to reduce races when several people pick at once.
+      const { data: row, error: selErr } = await supabase
+        .from(TABLE).select('*').eq('id', gameId).single();
+      if (selErr) throw selErr;
+      if (row.status !== 'waiting') throw new Error('Esa partida ya ha empezado.');
+
+      const seats = [...(row.state?.seats ?? [])];
+      const seat = seats[seatIndex];
+      if (!seat || seat.type !== 'human') throw new Error('Ese puesto no es válido.');
+      if (seat.userId && seat.userId !== uid) throw new Error('Ese comandante ya está ocupado, elige otro.');
+      seats[seatIndex] = { ...seat, userId: uid, name: playerName || seat.name };
 
       const memberIds = Array.from(new Set([...(row.member_ids ?? []), uid]));
       const { data, error: updErr } = await supabase
@@ -182,7 +202,8 @@ export function useMultiplayer() {
     error,
     connecting,
     createGame,
-    joinGame,
+    findGame,
+    claimSeat,
     pushState,
     setOnRemoteState,
     leaveGame,
