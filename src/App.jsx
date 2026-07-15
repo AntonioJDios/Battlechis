@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGameState } from './hooks/useGameState';
+import { useMultiplayer } from './hooks/useMultiplayer';
 import Board from './components/Board';
 import PlayerCards from './components/PlayerCards';
 import ControlPanel from './components/ControlPanel';
@@ -7,9 +8,10 @@ import GameControls from './components/GameControls';
 import CombatModal from './components/CombatModal';
 import ConquestModal from './components/ConquestModal';
 import SurpriseModal from './components/SurpriseModal';
+import Lobby from './components/Lobby';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
-import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse } from 'lucide-react';
+import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi } from 'lucide-react';
 
 export default function App() {
   const {
@@ -59,6 +61,30 @@ export default function App() {
   const [showLog, setShowLog] = useState(false);
   const [showRoster, setShowRoster] = useState(false);
   const [troopsToMove, setTroopsToMove] = useState(1);
+
+  // Online multiplayer
+  const mp = useMultiplayer();
+  const [showLobby, setShowLobby] = useState(false);
+
+  // Seats config for the lobby, derived from the setup screen (faction + human/bot).
+  const seatsConfig = setupPlayers.map((p) => ({
+    faction: p.faction,
+    type: p.isBot ? 'bot' : 'human',
+    name: p.name,
+  }));
+
+  // Host presses "Empezar" in the waiting room → start the game locally for now.
+  // (Cross-device state sync is the next step.)
+  const handleLaunchOnline = (game) => {
+    const seats = game?.state?.seats ?? seatsConfig;
+    const launchPlayers = seats.map((s) => ({
+      faction: s.faction,
+      isBot: s.type === 'bot',
+      name: s.name,
+    }));
+    setShowLobby(false);
+    startGame(launchPlayers);
+  };
 
   // Reset troop selector when selection changes — default to 1 (conservative)
   useEffect(() => {
@@ -252,18 +278,40 @@ export default function App() {
             </div>
           </div>
 
-          {/* Launch Action */}
-          <div className="flex justify-center">
+          {/* Launch Actions */}
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', justifyContent: 'center', alignItems: 'stretch', width: '100%' }}>
             <button
               onClick={handleStartGame}
-              className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-3 px-12 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+              style={{ flex: 1, maxWidth: '220px' }}
+              className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-sm sm:text-base py-3 px-4 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
             >
               <Play className="w-5 h-5 mr-1" />
-              INICIAR CAMPAÑA
+              JUGAR LOCAL
+            </button>
+            <button
+              onClick={() => setShowLobby(true)}
+              style={{ flex: 1, maxWidth: '220px' }}
+              className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-widest text-sm sm:text-base py-3 px-4 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
+            >
+              <Wifi className="w-5 h-5 mr-1" />
+              JUGAR ONLINE
             </button>
           </div>
 
         </div>
+
+        {/* Online lobby overlay */}
+        {showLobby && (
+          <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <Lobby
+              mp={mp}
+              seatsConfig={seatsConfig}
+              onSeatsChange={() => {}}
+              onBack={() => { mp.leaveGame(); setShowLobby(false); }}
+              onLaunch={handleLaunchOnline}
+            />
+          </div>
+        )}
       </div>
     );
   }

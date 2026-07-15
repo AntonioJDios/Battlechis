@@ -14,20 +14,14 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+      // Service worker desactivado durante el desarrollo: limpiamos cualquier
+      // registro/caché previo para que nunca se sirva una versión vieja.
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-          if (isDev) {
-            // Dev: el SW cache-first serviría código viejo — desregistrar y limpiar cachés
-            navigator.serviceWorker.getRegistrations()
-              .then((regs) => regs.forEach((r) => r.unregister()));
-            if (window.caches) {
-              caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
-            }
-          } else {
-            navigator.serviceWorker.register('/sw.js')
-              .then((reg) => console.log('SW registered:', reg))
-              .catch((err) => console.log('SW registration failed:', err));
+          navigator.serviceWorker.getRegistrations()
+            .then((regs) => regs.forEach((r) => r.unregister()));
+          if (window.caches) {
+            caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
           }
         });
       }
