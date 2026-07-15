@@ -13,7 +13,24 @@ import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi } from 'lucide-react';
 
+// Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
+// does NOT preserve key order — compares equal to our locally-built snapshot.
+// Used to detect and ignore our own echoed updates (prevents sync loops).
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const keys = Object.keys(value).filter((k) => k !== 'seats').sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+}
+
 export default function App() {
+  // Online multiplayer transport (declared first so useGameState can receive
+  // the online authority config).
+  const mp = useMultiplayer();
+  const [onlineActive, setOnlineActive] = useState(false);
+  const iAmHost = !!(mp.game && mp.userId === mp.game.host_id);
+  const onlineConfig = onlineActive ? { isOnline: true, isHost: iAmHost } : null;
+
   const {
     graph,
     players,
@@ -45,8 +62,25 @@ export default function App() {
     areAllied,
     alliances,
     nucleoData,
-    addLog
-  } = useGameState();
+    addLog,
+    getSnapshot,
+    hydrate,
+  } = useGameState(onlineConfig);
+
+  // ── Online turn authority ──
+  const seats = mp.game?.state?.seats ?? null;
+  const myFactions = seats
+    ? seats.filter((s) => s.userId === mp.userId).map((s) => s.faction)
+    : [];
+  const activeFaction = players[currentTurn]?.faction;
+  const isMyTurn = !onlineActive || myFactions.includes(activeFaction);
+  // This device may write to the shared state when it's my human turn, or when
+  // I'm the host and it's a bot's turn.
+  const authoritative = !onlineActive
+    ? true
+    : (myFactions.includes(activeFaction) || (iAmHost && players[currentTurn]?.isBot));
+
+  const lastSyncedRef = React.useRef(null);
 
   // Setup lobby state
   const [playerCount, setPlayerCount] = useState(5);
@@ -62,9 +96,13 @@ export default function App() {
   const [showRoster, setShowRoster] = useState(false);
   const [troopsToMove, setTroopsToMove] = useState(1);
 
-  // Online multiplayer
-  const mp = useMultiplayer();
-  const [showLobby, setShowLobby] = useState(false);
+  // Online multiplayer lobby visibility. If the URL carries ?join=CODE, open the
+  // lobby straight into the join view with the code prefilled.
+  const initialJoinCode = (() => {
+    try { return new URLSearchParams(window.location.search).get('join') || ''; }
+    catch { return ''; }
+  })();
+  const [showLobby, setShowLobby] = useState(Boolean(initialJoinCode));
 
   // Seats config for the lobby, derived from the setup screen (faction + human/bot).
   const seatsConfig = setupPlayers.map((p) => ({
@@ -73,17 +111,49 @@ export default function App() {
     name: p.name,
   }));
 
-  // Host presses "Empezar" in the waiting room → start the game locally for now.
-  // (Cross-device state sync is the next step.)
+  // Host presses "Empezar" in the waiting room → seed the board and go online.
+  // The push effect below then broadcasts the initial state to the other players.
   const handleLaunchOnline = (game) => {
-    const seats = game?.state?.seats ?? seatsConfig;
-    const launchPlayers = seats.map((s) => ({
+    const gameSeats = game?.state?.seats ?? seatsConfig;
+    const launchPlayers = gameSeats.map((s) => ({
       faction: s.faction,
       isBot: s.type === 'bot',
       name: s.name,
     }));
     setShowLobby(false);
+    setOnlineActive(true);
     startGame(launchPlayers);
+  };
+
+  // ── ONLINE: receive remote state (other player acted) and hydrate ──
+  useEffect(() => {
+    if (!mp.available) return;
+    mp.setOnRemoteState((remoteState) => {
+      if (!remoteState || remoteState.gameStarted === undefined) return; // ignore lobby-only state
+      lastSyncedRef.current = stableStringify(remoteState); // mark so we don't echo it back
+      if (remoteState.gameStarted) setOnlineActive(true);
+      hydrate(remoteState);
+    });
+  }, [mp.available, mp.setOnRemoteState, hydrate]);
+
+  // ── ONLINE: push local state when this device is the authoritative writer ──
+  useEffect(() => {
+    if (!onlineActive || !mp.game || !authoritative) return;
+    const snap = getSnapshot();
+    const key = stableStringify(snap);
+    if (key === lastSyncedRef.current) return; // nothing new, or we just applied remote
+    const t = setTimeout(() => {
+      lastSyncedRef.current = key;
+      const status = snap.phase === 'GAME_OVER' ? 'finished' : 'playing';
+      mp.pushState(mp.game.id, { ...snap, seats }, status);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [onlineActive, authoritative, mp.game, mp.pushState, seats, getSnapshot]);
+
+  // Guard modal/action callbacks so spectators (not their turn) can't mutate.
+  const guardAuth = (fn) => (...args) => {
+    if (onlineActive && !authoritative) return;
+    return fn(...args);
   };
 
   // Reset troop selector when selection changes — default to 1 (conservative)
@@ -306,6 +376,7 @@ export default function App() {
             <Lobby
               mp={mp}
               seatsConfig={seatsConfig}
+              initialJoinCode={initialJoinCode}
               onSeatsChange={() => {}}
               onBack={() => { mp.leaveGame(); setShowLobby(false); }}
               onLaunch={handleLaunchOnline}
@@ -468,8 +539,16 @@ export default function App() {
         {/* Left / Center Work Area (Board only) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Tutorial step box */}
-          {getTutorialBanner()}
+          {/* Online: spectator banner when it's not your turn */}
+          {onlineActive && !isMyTurn && (
+            <div className="w-full bg-slate-800/40 border border-slate-600/40 px-3 py-2 rounded text-slate-300 font-mono text-[10px] sm:text-xs flex items-center gap-2 shrink-0 animate-pulse">
+              <span className="text-base">⏳</span>
+              <span>Turno de <strong style={{ color: FACTIONS[activeFaction]?.neon }}>{players[currentTurn]?.name}</strong> — esperando su jugada…</span>
+            </div>
+          )}
+
+          {/* Tutorial step box (only on your turn) */}
+          {isMyTurn && getTutorialBanner()}
 
           {/* Symmetrical Star Battlefield Map — fills all remaining space */}
           <div style={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -480,7 +559,7 @@ export default function App() {
               phase={phase}
               selectedNode={selectedNode}
               highlightedNodes={highlightedNodes}
-              onNodeClick={(nodeId) => handleNodeClick(nodeId, troopsToMove)}
+              onNodeClick={(nodeId) => { if (!isMyTurn) return; handleNodeClick(nodeId, troopsToMove); }}
               players={players}
             />
           </div>
@@ -490,8 +569,8 @@ export default function App() {
 
       </main>
 
-      {/* Floating game controls */}
-      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && (
+      {/* Floating game controls — only for the player whose turn it is */}
+      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && isMyTurn && (
         <GameControls
           phase={phase}
           currentTurn={currentTurn}
@@ -515,15 +594,15 @@ export default function App() {
       {/* Modals & Overlays */}
       <CombatModal
         combatState={combatState}
-        onRollRound={executeCombatRound}
-        onRetreat={retreatCombat}
-        onRetreatDefender={retreatDefender}
+        onRollRound={guardAuth(executeCombatRound)}
+        onRetreat={guardAuth(retreatCombat)}
+        onRetreatDefender={guardAuth(retreatDefender)}
         players={players}
       />
 
       <ConquestModal
         conquestState={conquestState}
-        onRoll={executeConquestRoll}
+        onRoll={guardAuth(executeConquestRoll)}
         players={players}
         currentTurn={currentTurn}
         graph={graph}
@@ -531,7 +610,7 @@ export default function App() {
 
       <SurpriseModal
         surpriseState={surpriseState}
-        onDraw={executeSurpriseDraw}
+        onDraw={guardAuth(executeSurpriseDraw)}
         players={players}
         currentTurn={currentTurn}
         graph={graph}

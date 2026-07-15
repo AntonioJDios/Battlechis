@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
-import { Users, Wifi, Copy, Check, ArrowLeft, Loader2 } from 'lucide-react';
+import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2 } from 'lucide-react';
 
 /**
  * Online lobby: create a game (configuring the 5 seats) or join by code,
@@ -9,9 +9,9 @@ import { Users, Wifi, Copy, Check, ArrowLeft, Loader2 } from 'lucide-react';
  * Transport comes from useMultiplayer (passed in via props). This component
  * is pure UI + orchestration; it doesn't know the game rules.
  */
-export default function Lobby({ mp, seatsConfig, onSeatsChange, onBack, onLaunch }) {
-  const [view, setView] = useState('choose'); // choose | create | join | waiting
-  const [code, setCode] = useState('');
+export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsChange, onBack, onLaunch }) {
+  const [view, setView] = useState(initialJoinCode ? 'join' : 'choose'); // choose | create | join | waiting
+  const [code, setCode] = useState(initialJoinCode);
   const [name, setName] = useState('');
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,11 +49,33 @@ export default function Lobby({ mp, seatsConfig, onSeatsChange, onBack, onLaunch
     }
   };
 
+  const inviteLink = game?.code ? `${window.location.origin}/?join=${game.code}` : '';
+
   const copyCode = () => {
     if (!game?.code) return;
     navigator.clipboard?.writeText(game.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  const shareLink = async () => {
+    if (!inviteLink) return;
+    const shareData = {
+      title: 'BattleChis',
+      text: `¡Únete a mi partida de BattleChis! Código: ${game.code}`,
+      url: inviteLink,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard?.writeText(inviteLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    } catch {
+      /* user cancelled share — ignore */
+    }
   };
 
   const err = localError || mp.error;
@@ -85,6 +107,12 @@ export default function Lobby({ mp, seatsConfig, onSeatsChange, onBack, onLaunch
               {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
             </button>
             <div className="font-mono text-[9px] text-gray-500 mt-2">Compártelo con tus amigos para que se unan</div>
+            <button
+              onClick={shareLink}
+              className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold mt-3 inline-flex items-center gap-2"
+            >
+              <Share2 className="w-4 h-4" /> Compartir enlace
+            </button>
           </div>
 
           <div className="border-t border-slate-800 pt-3">
@@ -171,7 +199,7 @@ export default function Lobby({ mp, seatsConfig, onSeatsChange, onBack, onLaunch
           className="btn-tactical border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20 py-3 text-sm font-bold flex items-center justify-center gap-2"
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-          Crear partida ({humanCount} humano{humanCount !== 1 ? 's' : ''} · {seatsConfig.length - humanCount} IA)
+          Crear partida
         </button>
         <button
           onClick={() => { setView('join'); setLocalError(null); }}

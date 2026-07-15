@@ -5,7 +5,14 @@ import { SoundManager } from '../components/SoundManager';
 // Surprise card pool (Monopoly-style): troops gained/lost by the platoon landing on the cell
 export const SURPRISE_CARDS = [+5, +3, +2, +1, -1, -2, -3];
 
-export function useGameState() {
+export function useGameState(online = null) {
+  // Online config (null = offline single-device play, unchanged behaviour):
+  //   { isOnline: true, isHost: bool }
+  // In online mode the HOST is the only client that runs bot logic, so bots
+  // don't get executed (and pushed) by every device at once.
+  const isOnline = online?.isOnline ?? false;
+  const botAuthority = !isOnline || (online?.isHost ?? false); // may this device run bots?
+
   const [graph] = useState(() => generateBoardGraph());
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(0); // Index in players array
@@ -887,6 +894,7 @@ export function useGameState() {
   // --- BOT AI ROTATION TIMER/EFFECT ---
   useEffect(() => {
     if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState) return;
+    if (!botAuthority) return; // online: only the host drives bots
 
     const currentPlayer = players[currentTurn];
     if (!currentPlayer || !currentPlayer.isBot) return;
@@ -1108,6 +1116,7 @@ export function useGameState() {
   // --- BOT AUTO-RESOLVE: Combat ---
   useEffect(() => {
     if (!combatState) return;
+    if (!botAuthority) return; // online: only the host drives bots
     // Guard: don't re-trigger once battle is concluded (ended flag set by executeCombatRound)
     if (combatState.ended) return;
     const attacker = players.find(p => p.faction === combatState.attackerFaction);
@@ -1115,11 +1124,12 @@ export function useGameState() {
 
     const timer = setTimeout(() => executeCombatRound(true), 900);
     return () => clearTimeout(timer);
-  }, [combatState, executeCombatRound, players]);
+  }, [combatState, executeCombatRound, players, botAuthority]);
 
   // --- BOT AUTO-RESOLVE: Conquest ---
   useEffect(() => {
     if (!conquestState) return;
+    if (!botAuthority) return; // online: only the host drives bots
     const currentPlayer = players[currentTurn];
     if (!currentPlayer?.isBot) return;
 
@@ -1128,17 +1138,18 @@ export function useGameState() {
       executeConquestRoll(roll);
     }, 900);
     return () => clearTimeout(timer);
-  }, [conquestState, executeConquestRoll, players, currentTurn]);
+  }, [conquestState, executeConquestRoll, players, currentTurn, botAuthority]);
 
   // --- BOT AUTO-RESOLVE: Surprise card ---
   useEffect(() => {
     if (!surpriseState) return;
+    if (!botAuthority) return; // online: only the host drives bots
     const currentPlayer = players[currentTurn];
     if (!currentPlayer?.isBot) return;
 
     const timer = setTimeout(() => executeSurpriseDraw(), 1200);
     return () => clearTimeout(timer);
-  }, [surpriseState, executeSurpriseDraw, players, currentTurn]);
+  }, [surpriseState, executeSurpriseDraw, players, currentTurn, botAuthority]);
 
   // --- Highlight owned bases during RECRUIT for human player ---
   useEffect(() => {
@@ -1153,6 +1164,37 @@ export function useGameState() {
     setHighlightedNodes(ownedBases);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, currentTurn]); // only re-run at phase/turn boundary
+
+  // ── Online sync: serialize / apply the full shared game state ──
+  // selectedNode & highlightedNodes are intentionally NOT synced (local UI).
+  const getSnapshot = useCallback(() => ({
+    players, currentTurn, phase, boardState, diceRoll, sixCount,
+    recruitmentTroops, logs, gameStarted, combatState, conquestState,
+    surpriseState, alliances, nucleoData,
+  }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
+       recruitmentTroops, logs, gameStarted, combatState, conquestState,
+       surpriseState, alliances, nucleoData]);
+
+  const hydrate = useCallback((snap) => {
+    if (!snap) return;
+    if (snap.players !== undefined) setPlayers(snap.players);
+    if (snap.currentTurn !== undefined) setCurrentTurn(snap.currentTurn);
+    if (snap.phase !== undefined) setPhase(snap.phase);
+    if (snap.boardState !== undefined) setBoardState(snap.boardState);
+    if (snap.diceRoll !== undefined) setDiceRoll(snap.diceRoll);
+    if (snap.sixCount !== undefined) setSixCount(snap.sixCount);
+    if (snap.recruitmentTroops !== undefined) setRecruitmentTroops(snap.recruitmentTroops);
+    if (snap.logs !== undefined) setLogs(snap.logs);
+    if (snap.gameStarted !== undefined) setGameStarted(snap.gameStarted);
+    if (snap.combatState !== undefined) setCombatState(snap.combatState);
+    if (snap.conquestState !== undefined) setConquestState(snap.conquestState);
+    if (snap.surpriseState !== undefined) setSurpriseState(snap.surpriseState);
+    if (snap.alliances !== undefined) setAlliances(snap.alliances);
+    if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
+    // Incoming state means someone else acted — clear our local selection.
+    setSelectedNode(null);
+    setHighlightedNodes([]);
+  }, []);
 
   return {
     graph,
@@ -1185,6 +1227,8 @@ export function useGameState() {
     proposeAlliance,
     breakAlliance,
     areAllied,
-    addLog
+    addLog,
+    getSnapshot,
+    hydrate,
   };
 }
