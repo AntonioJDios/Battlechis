@@ -237,12 +237,15 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
 
 function Shell({ title, children, onBack }) {
   return (
-    <div className="w-full max-w-md border border-cyan-500/20 rounded bg-[#101424]/95 backdrop-blur-md p-6 shadow-[0_0_50px_rgba(0,240,255,0.15)] animate-fade-in">
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={onBack} className="p-1.5 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-slate-700 transition-all">
+    <div
+      className="w-full max-w-md border border-cyan-500/20 rounded bg-[#101424]/95 backdrop-blur-md p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] animate-fade-in"
+      style={{ maxHeight: 'calc(100vh - 20px)', overflowY: 'auto' }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <button onClick={onBack} className="p-1.5 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-slate-700 transition-all shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h2 className="font-tactical text-lg font-black text-cyan-400 tracking-wider uppercase">{title}</h2>
+        <h2 className="font-tactical text-base font-black text-cyan-400 tracking-wider uppercase">{title}</h2>
       </div>
       {children}
     </div>

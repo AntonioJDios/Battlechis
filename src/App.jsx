@@ -145,7 +145,9 @@ export default function App() {
     const gameSeats = game?.state?.seats ?? seatsConfig;
     const launchPlayers = gameSeats.map((s) => ({
       faction: s.faction,
-      isBot: s.type === 'bot',
+      // A human seat nobody claimed → play it as a bot, so the game never
+      // stalls on an unmanned seat.
+      isBot: s.type === 'bot' || (s.type === 'human' && !s.userId),
       name: s.name,
     }));
     setShowLobby(false);
