@@ -164,9 +164,14 @@ export default function App() {
     });
   }, [mp.available, mp.setOnRemoteState, hydrate]);
 
-  // ── ONLINE: push local state when this device is the authoritative writer ──
+  // ── ONLINE: push ANY local state change to the shared row ──
+  // NOTE: we must NOT gate this on "is it still my turn", because the change
+  // that ENDS my turn (endTurn → currentTurn now points at the opponent) must
+  // still be broadcast — otherwise the opponent never learns it's their turn.
+  // Input is already gated elsewhere, so only the acting client's state ever
+  // diverges from lastSyncedRef; hydrated remote state matches it → no echo.
   useEffect(() => {
-    if (!onlineActive || !mp.game || !authoritative) return;
+    if (!onlineActive || !mp.game) return;
     const snap = getSnapshot();
     const key = stableStringify(snap);
     if (key === lastSyncedRef.current) return; // nothing new, or we just applied remote
@@ -176,7 +181,7 @@ export default function App() {
       mp.pushState(mp.game.id, { ...snap, seats }, status);
     }, 250);
     return () => clearTimeout(t);
-  }, [onlineActive, authoritative, mp.game, mp.pushState, seats, getSnapshot]);
+  }, [onlineActive, mp.game, mp.pushState, seats, getSnapshot]);
 
   // Guard modal/action callbacks so spectators (not their turn) can't mutate.
   const guardAuth = (fn) => (...args) => {
