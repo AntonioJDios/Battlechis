@@ -23,6 +23,8 @@ export default function GameControls({
   if (!currentPlayer) return null;
 
   const factionColor = FACTIONS[currentPlayer.faction]?.neon ?? '#00f0ff';
+  const factionRgb = FACTIONS[currentPlayer.faction]?.rgb ?? '0, 240, 255';
+  const fc = (a) => `rgba(${factionRgb}, ${a})`; // faction color with alpha
   const isBot = currentPlayer.isBot;
 
   return (
@@ -70,26 +72,26 @@ export default function GameControls({
       {/* ── RECRUIT phase ── */}
       {!isBot && phase === 'RECRUIT' && (
         <div style={{
-          background: 'rgba(80,10,10,0.3)',
-          border: '1px solid rgba(255,59,59,0.5)',
+          background: fc(0.12),
+          border: `1px solid ${fc(0.5)}`,
           borderRadius: '8px',
           padding: '8px 10px',
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
         }}>
-          <p className="font-tactical text-[11px] font-bold text-red-400">+{recruitmentTroops} Tropas disponibles</p>
+          <p className="font-tactical text-[11px] font-bold" style={{ color: factionColor }}>+{recruitmentTroops} Tropas disponibles</p>
 
           {/* Troop amount selector — allows splitting across bases */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
               onClick={() => onTroopsChange(Math.max(1, troopsToMove - 1))}
-              style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(255,59,59,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+              style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
             >−</button>
-            <span className="font-tactical font-black text-xl" style={{ color: '#f87171', width: 28, textAlign: 'center' }}>{troopsToMove}</span>
+            <span className="font-tactical font-black text-xl" style={{ color: factionColor, width: 28, textAlign: 'center' }}>{troopsToMove}</span>
             <button
               onClick={() => onTroopsChange(Math.min(recruitmentTroops, troopsToMove + 1))}
-              style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(255,59,59,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+              style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
             >+</button>
             <span className="font-mono text-[9px] text-gray-500">/{recruitmentTroops}</span>
           </div>
@@ -108,10 +110,10 @@ export default function GameControls({
               className="font-tactical text-[11px] font-bold animate-pulse"
               style={{
                 padding: '7px 18px',
-                border: '2px dashed rgba(0,240,255,0.6)',
+                border: `2px dashed ${fc(0.6)}`,
                 borderRadius: '8px',
-                background: 'rgba(0,240,255,0.07)',
-                color: '#00f0ff',
+                background: fc(0.08),
+                color: factionColor,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
@@ -122,17 +124,17 @@ export default function GameControls({
             <div style={{
               width: 44, height: 44,
               borderRadius: '8px',
-              border: '2px solid var(--neon-cyan)',
+              border: `2px solid ${factionColor}`,
               background: '#121625',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 22,
               fontWeight: 900,
-              color: '#00f0ff',
+              color: factionColor,
               flexShrink: 0,
               position: 'relative',
-              boxShadow: '0 0 12px rgba(0,240,255,0.3)',
+              boxShadow: `0 0 12px ${fc(0.3)}`,
               fontFamily: 'var(--font-tactical)',
             }}>
               {diceRoll}
@@ -152,24 +154,24 @@ export default function GameControls({
           {/* Troop selector — only when unit selected and targets available */}
           {selectedNode && highlightedNodes.length > 0 && (
             <div style={{
-              background: 'rgba(0,240,255,0.08)',
-              border: '1px solid rgba(0,240,255,0.35)',
+              background: fc(0.1),
+              border: `1px solid ${fc(0.4)}`,
               borderRadius: '8px',
               padding: '7px 10px',
               display: 'flex',
               flexDirection: 'column',
               gap: 5,
             }}>
-              <span className="font-mono text-[9px] text-cyan-400 uppercase tracking-wider">Tropas a mover</span>
+              <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: factionColor }}>Tropas a mover</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <button
                   onClick={() => onTroopsChange(Math.max(1, troopsToMove - 1))}
-                  style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(100,120,180,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                  style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
                 >−</button>
-                <span className="font-tactical font-black text-xl" style={{ color: '#00f0ff', width: 28, textAlign: 'center' }}>{troopsToMove}</span>
+                <span className="font-tactical font-black text-xl" style={{ color: factionColor, width: 28, textAlign: 'center' }}>{troopsToMove}</span>
                 <button
                   onClick={() => onTroopsChange(Math.min(maxMovable, troopsToMove + 1))}
-                  style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(100,120,180,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                  style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
                 >+</button>
                 <span className="font-mono text-[9px] text-gray-500">/{maxMovable}{isBase ? ' (1 queda)' : ''}</span>
               </div>
@@ -203,24 +205,24 @@ export default function GameControls({
           {/* Troop selector when origin selected */}
           {selectedNode && highlightedNodes.length > 0 && (
             <div style={{
-              background: 'rgba(99,102,241,0.1)',
-              border: '1px solid rgba(99,102,241,0.4)',
+              background: fc(0.1),
+              border: `1px solid ${fc(0.4)}`,
               borderRadius: '8px',
               padding: '7px 10px',
               display: 'flex',
               flexDirection: 'column',
               gap: 5,
             }}>
-              <span className="font-mono text-[9px] text-indigo-300 uppercase tracking-wider">Tropas a mover</span>
+              <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: factionColor }}>Tropas a mover</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <button
                   onClick={() => onTroopsChange(Math.max(1, troopsToMove - 1))}
-                  style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(99,102,241,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                  style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
                 >−</button>
-                <span className="font-tactical font-black text-xl" style={{ color: '#818cf8', width: 28, textAlign: 'center' }}>{troopsToMove}</span>
+                <span className="font-tactical font-black text-xl" style={{ color: factionColor, width: 28, textAlign: 'center' }}>{troopsToMove}</span>
                 <button
                   onClick={() => onTroopsChange(Math.min(maxMovable, troopsToMove + 1))}
-                  style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid rgba(99,102,241,0.4)', background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                  style={{ width: 28, height: 28, borderRadius: 4, border: `1px solid ${fc(0.4)}`, background: '#121625', color: '#9ca3af', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
                 >+</button>
                 <span className="font-mono text-[9px] text-gray-500">/{maxMovable}{isBase ? ' (1 queda)' : ''}</span>
               </div>
