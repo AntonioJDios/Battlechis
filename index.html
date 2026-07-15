@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d13" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>JuegoGonzi - Tactical Commander</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+          if (isDev) {
+            // Dev: el SW cache-first serviría código viejo — desregistrar y limpiar cachés
+            navigator.serviceWorker.getRegistrations()
+              .then((regs) => regs.forEach((r) => r.unregister()));
+            if (window.caches) {
+              caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+            }
+          } else {
+            navigator.serviceWorker.register('/sw.js')
+              .then((reg) => console.log('SW registered:', reg))
+              .catch((err) => console.log('SW registration failed:', err));
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

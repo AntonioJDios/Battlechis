@@ -1,0 +1,286 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+:root {
+  /* Theme Colors */
+  --bg-color: #0b0d13;
+  --panel-bg: rgba(16, 20, 30, 0.85);
+  --panel-border: #1f293d;
+  --panel-header: rgba(28, 35, 51, 0.9);
+  --text-main: #c4d1ec;
+  --text-bright: #ffffff;
+  --text-muted: #6b7c96;
+  
+  /* Cyber Neon Accents */
+  --neon-cyan: #00f0ff;
+  --neon-red: #ff3b3b;
+  --neon-blue: #0088ff;
+  --neon-yellow: #ffd000;
+  --neon-green: #00e676;
+  --neon-purple: #c542ff;
+  --neon-grey: #8093a8;
+
+  /* Font Families */
+  --font-tactical: 'Orbitron', monospace;
+  --font-stats: 'Rajdhani', sans-serif;
+  --font-main: 'Inter', sans-serif;
+
+  /* Standard glows */
+  --glow-cyan: 0 0 10px rgba(0, 240, 255, 0.4);
+  --glow-red: 0 0 10px rgba(255, 59, 59, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  position: relative;
+}
+
+
+/* ── Landscape mobile / short viewport ─────────────────── */
+@media (max-height: 520px) {
+  .game-header {
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 8px !important;
+  }
+  .header-subtitle   { display: none !important; }
+  .game-main         { padding: 6px !important; gap: 6px !important; }
+  .sidebar-cards     { max-height: 120px !important; }
+  .panel-header      { padding: 3px 8px !important; font-size: 0.6rem !important; }
+  .control-panel-body{ padding: 5px !important; gap: 4px !important; }
+  .tutorial-banner   { display: none !important; }   /* hide step hints — saves ~50px */
+}
+
+@media (max-height: 380px) {
+  .game-header   { height: 28px !important; min-height: 28px !important; }
+  .game-main     { padding: 3px !important; gap: 3px !important; }
+  .sidebar-cards { display: none !important; }       /* hide player cards — saves more height */
+}
+
+/* ── Narrow width (portrait phone) ─────────────────────── */
+@media (max-width: 500px) {
+  .game-sidebar {
+    width: 190px !important;
+    min-width: 190px !important;
+    max-width: 190px !important;
+  }
+}
+
+/* CRT Scanline & Grid Overlays */
+body::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 9999;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+  opacity: 0.15;
+}
+
+body::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(30, 40, 60, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 40, 60, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Glitch animations & UI panel blocks */
+.tactical-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(32, 45, 75, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.tactical-panel::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.panel-header {
+  background: var(--panel-header);
+  padding: 8px 12px;
+  font-family: var(--font-tactical);
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  border-bottom: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Military buttons */
+.btn-tactical {
+  background: rgba(12, 35, 60, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  color: var(--neon-cyan);
+  font-family: var(--font-tactical);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-transform: uppercase;
+  clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-tactical:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  text-shadow: 0 0 5px var(--neon-cyan);
+}
+
+.btn-tactical:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.btn-tactical:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: var(--panel-border);
+  color: var(--text-muted);
+}
+
+/* Dynamic Faction Accent Utilities */
+.faction-red { color: var(--neon-red); text-shadow: 0 0 5px rgba(255, 59, 59, 0.5); }
+.faction-blue { color: var(--neon-blue); text-shadow: 0 0 5px rgba(0, 136, 255, 0.5); }
+.faction-yellow { color: var(--neon-yellow); text-shadow: 0 0 5px rgba(255, 208, 0, 0.5); }
+.faction-green { color: var(--neon-green); text-shadow: 0 0 5px rgba(0, 230, 118, 0.5); }
+.faction-purple { color: var(--neon-purple); text-shadow: 0 0 5px rgba(197, 66, 255, 0.5); }
+.faction-grey { color: var(--neon-grey); }
+
+.bg-faction-red { background-color: var(--neon-red); }
+.bg-faction-blue { background-color: var(--neon-blue); }
+.bg-faction-yellow { background-color: var(--neon-yellow); }
+.bg-faction-green { background-color: var(--neon-green); }
+.bg-faction-purple { background-color: var(--neon-purple); }
+.bg-faction-grey { background-color: var(--neon-grey); }
+
+.border-faction-red { border-color: var(--neon-red) !important; box-shadow: 0 0 10px rgba(255, 59, 59, 0.3); }
+.border-faction-blue { border-color: var(--neon-blue) !important; box-shadow: 0 0 10px rgba(0, 136, 255, 0.3); }
+.border-faction-yellow { border-color: var(--neon-yellow) !important; box-shadow: 0 0 10px rgba(255, 208, 0, 0.3); }
+.border-faction-green { border-color: var(--neon-green) !important; box-shadow: 0 0 10px rgba(0, 230, 118, 0.3); }
+.border-faction-purple { border-color: var(--neon-purple) !important; box-shadow: 0 0 10px rgba(197, 66, 255, 0.3); }
+.border-faction-grey { border-color: var(--neon-grey) !important; }
+
+/* Grid helper */
+.grid-lines {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseBorder {
+  0% { box-shadow: 0 0 5px var(--neon-cyan); }
+  50% { box-shadow: 0 0 20px var(--neon-cyan), inset 0 0 10px rgba(0, 240, 255, 0.2); }
+  100% { box-shadow: 0 0 5px var(--neon-cyan); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  15% { transform: rotate(-5deg) scale(1.05); }
+  30% { transform: rotate(5deg) scale(1.05); }
+  45% { transform: rotate(-3deg) scale(1); }
+  60% { transform: rotate(3deg) scale(1); }
+  75% { transform: rotate(-1deg) scale(1); }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-border {
+  animation: pulseBorder 2s infinite ease-in-out;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+.animate-spin-slow {
+  animation: spinSlow 12s linear infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .6; transform: scale(1.03); }
+}
+
