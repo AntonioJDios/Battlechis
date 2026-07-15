@@ -1,6 +1,6 @@
 {
-  "name": "JuegoGonzi - Tactical Commander",
-  "short_name": "JuegoGonzi",
+  "name": "BattleChis - Tactical Commander",
+  "short_name": "BattleChis",
   "description": "Tactical military board game combining Risk combat and Parchis movement.",
   "start_url": ".",
   "display": "standalone",

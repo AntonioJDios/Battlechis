@@ -95,6 +95,7 @@ export default function App() {
   const [showLog, setShowLog] = useState(false);
   const [showRoster, setShowRoster] = useState(false);
   const [troopsToMove, setTroopsToMove] = useState(1);
+  const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
 
   // Online multiplayer lobby visibility. If the URL carries ?join=CODE, open the
   // lobby straight into the join view with the code prefilled.
@@ -233,140 +234,165 @@ export default function App() {
   // Render Setup Lobby Screen
   if (!gameStarted) {
     return (
-      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px', zIndex: 10 }}>
-        <div className="w-full max-w-3xl border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-6 sm:p-8 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
-          
+      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px', zIndex: 10 }}>
+        <div className="w-full max-w-3xl border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
+
           {/* Top corner design markers */}
-          <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400"></div>
-          <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400"></div>
-          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400"></div>
-          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400"></div>
+          <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-cyan-400"></div>
+          <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-cyan-400"></div>
+          <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-cyan-400"></div>
+          <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-cyan-400"></div>
 
-          {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="font-tactical text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase mb-1 drop-shadow-[0_0_10px_rgba(0,240,255,0.4)]">
-              JUEGOGONZI
-            </h1>
-            <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold">
-              CONSOLA TÁCTICA MULTIJUGADOR (RISK + PARCHÍS)
-            </p>
-          </div>
+          {(() => {
+            const total = setupPlayers.length;
+            const step = Math.min(wizardIdx, total);          // clamp if count shrank
+            const onReview = step >= total;
+            const player = setupPlayers[step];
 
-          {/* Player Count Selection */}
-          <div className="mb-6 flex flex-col sm:flex-row items-center justify-between border-b border-slate-800 pb-4 gap-4">
-            <div>
-              <div className="font-tactical text-xs text-white font-bold mb-1">CONFIGURACIÓN DE TEATRO DE GUERRA</div>
-              <div className="text-[10px] text-gray-500 font-mono">Selecciona la cantidad de comandantes desplegados.</div>
-            </div>
-            
-            <div className="flex gap-2">
-              {[4, 5].map(count => (
-                <button
-                  key={count}
-                  onClick={() => handlePlayerCountChange(count)}
-                  className={`px-6 py-2 font-tactical text-sm border font-bold transition-all ${
-                    playerCount === count 
-                      ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
-                      : 'border-slate-800 text-gray-500 hover:border-slate-700 hover:text-white'
-                  }`}
-                  style={{ clipPath: 'polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%)' }}
-                >
-                  {count} Jugadores
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Player Slots Configuration */}
-          <div className="space-y-4 mb-8">
-            <span className="font-tactical text-[10px] text-gray-400 tracking-wider block uppercase">
-              ASIGNACIÓN DE COMANDANTES
-            </span>
-            
-            <div className="grid grid-cols-1 gap-3">
-              {setupPlayers.map((player, idx) => (
-                <div 
-                  key={idx}
-                  className="flex flex-col sm:flex-row items-center gap-3 bg-[#0d101a] border border-slate-900 rounded p-3"
-                >
-                  {/* Slot identifier */}
-                  <div className="flex items-center gap-2 w-full sm:w-1/4">
-                    <div className="w-6 h-6 rounded border border-cyan-500/20 bg-cyan-950/20 flex items-center justify-center">
-                      <span className="font-mono text-xs text-cyan-400 font-black">{idx + 1}</span>
-                    </div>
-                    <span className="font-tactical text-xs text-white uppercase font-bold truncate">
-                      PUESTO {idx + 1}
-                    </span>
+            return (
+              <>
+                {/* Header: title + count toggle */}
+                <div className="flex items-center justify-between gap-3 mb-3 border-b border-slate-800 pb-2">
+                  <div>
+                    <h1 className="font-tactical text-lg sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase leading-none drop-shadow-[0_0_10px_rgba(0,240,255,0.4)]">
+                      BATTLECHIS
+                    </h1>
+                    <p className="font-tactical text-[8px] sm:text-[10px] text-cyan-400/70 tracking-[3px] uppercase font-bold mt-0.5">
+                      RISK + PARCHÍS TÁCTICO
+                    </p>
                   </div>
-
-                  {/* Faction selector */}
-                  <div className="w-full sm:w-1/3">
-                    <select
-                      value={player.faction}
-                      onChange={(e) => handleSetupPlayerChange(idx, 'faction', parseInt(e.target.value))}
-                      className="w-full bg-[#121625] border border-slate-800 text-gray-300 font-mono text-xs p-2 rounded focus:outline-none focus:border-cyan-500"
-                    >
-                      {FACTIONS.map(f => (
-                        <option 
-                          key={f.id} 
-                          value={f.id}
-                          disabled={setupPlayers.some((p, pIdx) => p.faction === f.id && pIdx !== idx)}
-                        >
-                          {f.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex gap-2 shrink-0">
+                    {[4, 5].map(count => (
+                      <button
+                        key={count}
+                        onClick={() => { handlePlayerCountChange(count); setWizardIdx(0); }}
+                        className={`px-3 py-1.5 font-tactical text-xs border font-bold transition-all ${
+                          playerCount === count
+                            ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
+                            : 'border-slate-800 text-gray-500 hover:border-slate-700 hover:text-white'
+                        }`}
+                        style={{ clipPath: 'polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%)' }}
+                      >
+                        {count} Jug.
+                      </button>
+                    ))}
                   </div>
-
-                  {/* Commander Name Input */}
-                  <div className="w-full sm:w-1/4">
-                    <input
-                      type="text"
-                      placeholder="Nombre Comandante"
-                      value={player.name}
-                      onChange={(e) => handleSetupPlayerChange(idx, 'name', e.target.value)}
-                      className="w-full bg-[#121625] border border-slate-800 text-gray-300 font-mono text-xs p-2 rounded focus:outline-none focus:border-cyan-500"
-                    />
-                  </div>
-
-                  {/* Controller Toggle (Human vs Bot) */}
-                  <div className="w-full sm:w-1/5 flex justify-end">
-                    <button
-                      onClick={() => handleSetupPlayerChange(idx, 'isBot', !player.isBot)}
-                      className={`w-full py-1.5 px-3 rounded font-tactical text-[10px] font-bold border transition-all text-center ${
-                        player.isBot 
-                          ? 'border-amber-500/50 bg-amber-950/20 text-amber-500 hover:bg-amber-900/20'
-                          : 'border-green-500/50 bg-green-950/20 text-green-400 hover:bg-green-900/20'
-                      }`}
-                    >
-                      {player.isBot ? '🤖 IA TÁCTICA' : '👤 HUMANO'}
-                    </button>
-                  </div>
-
                 </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Launch Actions */}
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', justifyContent: 'center', alignItems: 'stretch', width: '100%' }}>
-            <button
-              onClick={handleStartGame}
-              style={{ flex: 1, maxWidth: '220px' }}
-              className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-sm sm:text-base py-3 px-4 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
-            >
-              <Play className="w-5 h-5 mr-1" />
-              JUGAR LOCAL
-            </button>
-            <button
-              onClick={() => setShowLobby(true)}
-              style={{ flex: 1, maxWidth: '220px' }}
-              className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-widest text-sm sm:text-base py-3 px-4 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
-            >
-              <Wifi className="w-5 h-5 mr-1" />
-              JUGAR ONLINE
-            </button>
-          </div>
+                {/* Progress dots */}
+                <div className="flex items-center justify-center gap-1.5 mb-3">
+                  {setupPlayers.map((_, i) => (
+                    <div key={i}
+                      className="rounded-full transition-all"
+                      style={{
+                        width: i === step ? 22 : 8, height: 8,
+                        background: i < step || onReview ? '#00e676' : i === step ? '#00f0ff' : 'rgba(255,255,255,0.15)',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {!onReview ? (
+                  /* ── One seat at a time ── */
+                  <div className="animate-fade-in">
+                    <div className="text-center mb-3">
+                      <div className="font-tactical text-sm text-white font-bold uppercase tracking-wider">
+                        Puesto {step + 1} <span className="text-gray-600">/ {total}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 max-w-md mx-auto">
+                      <select
+                        value={player.faction}
+                        onChange={(e) => handleSetupPlayerChange(step, 'faction', parseInt(e.target.value))}
+                        className="w-full bg-[#121625] border border-slate-800 text-gray-200 font-mono text-sm p-2.5 rounded focus:outline-none focus:border-cyan-500"
+                      >
+                        {FACTIONS.map(f => (
+                          <option key={f.id} value={f.id}
+                            disabled={setupPlayers.some((p, pIdx) => p.faction === f.id && pIdx !== step)}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="text"
+                        placeholder="Nombre del comandante"
+                        value={player.name}
+                        onChange={(e) => handleSetupPlayerChange(step, 'name', e.target.value)}
+                        className="w-full bg-[#121625] border border-slate-800 text-gray-200 font-mono text-sm p-2.5 rounded focus:outline-none focus:border-cyan-500"
+                      />
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSetupPlayerChange(step, 'isBot', false)}
+                          className={`flex-1 py-3 rounded font-tactical text-sm font-black border-2 transition-all ${
+                            !player.isBot
+                              ? 'border-green-400 bg-green-500 text-[#04110a] shadow-[0_0_16px_rgba(0,230,118,0.5)]'
+                              : 'border-slate-700 bg-transparent text-slate-500 hover:text-slate-300'
+                          }`}
+                        >{!player.isBot ? '✓ ' : ''}👤 HUMANO</button>
+                        <button
+                          onClick={() => handleSetupPlayerChange(step, 'isBot', true)}
+                          className={`flex-1 py-3 rounded font-tactical text-sm font-black border-2 transition-all ${
+                            player.isBot
+                              ? 'border-amber-400 bg-amber-500 text-[#1a1204] shadow-[0_0_16px_rgba(245,158,11,0.5)]'
+                              : 'border-slate-700 bg-transparent text-slate-500 hover:text-slate-300'
+                          }`}
+                        >{player.isBot ? '✓ ' : ''}🤖 IA</button>
+                      </div>
+                    </div>
+
+                    {/* Nav */}
+                    <div className="flex justify-between items-center gap-3 mt-4 max-w-md mx-auto">
+                      <button
+                        onClick={() => setWizardIdx(step - 1)}
+                        disabled={step === 0}
+                        className="btn-tactical border-slate-700 text-slate-400 disabled:opacity-30 py-2 px-5 text-xs"
+                      >◀ Anterior</button>
+                      <button
+                        onClick={() => setWizardIdx(step + 1)}
+                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 px-6 text-xs font-bold"
+                      >{step === total - 1 ? 'Revisar ▶' : 'Siguiente ▶'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Review + launch ── */
+                  <div className="animate-fade-in max-w-md mx-auto">
+                    <div className="flex flex-col gap-1.5 mb-3">
+                      {setupPlayers.map((p, i) => (
+                        <button key={i} onClick={() => setWizardIdx(i)}
+                          className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5 hover:border-slate-700 transition-all text-left">
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[p.faction]?.neon, flexShrink: 0 }} />
+                          <span className="font-tactical text-[11px] text-white flex-1 truncate">{p.name}</span>
+                          <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${p.isBot ? 'text-amber-400 bg-amber-950/30' : 'text-green-400 bg-green-950/30'}`}>
+                            {p.isBot ? '🤖 IA' : '👤 Humano'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={handleStartGame}
+                        style={{ flex: 1 }}
+                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-wider text-sm py-2.5 px-3 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+                      ><Play className="w-4 h-4 mr-1" /> LOCAL</button>
+                      <button
+                        onClick={() => setShowLobby(true)}
+                        style={{ flex: 1 }}
+                        className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-wider text-sm py-2.5 px-3 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
+                      ><Wifi className="w-4 h-4 mr-1" /> ONLINE</button>
+                    </div>
+                    <button
+                      onClick={() => setWizardIdx(total - 1)}
+                      className="btn-tactical border-slate-700 text-slate-400 py-2 px-5 text-xs mt-2 w-full"
+                    >◀ Volver a editar</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
         </div>
 
@@ -453,7 +479,7 @@ export default function App() {
           <Shield className="w-5 h-5 text-cyan-400" />
           <div>
             <h2 className="font-tactical text-sm font-bold text-white uppercase tracking-wider leading-none">
-              JUEGOGONZI
+              BATTLECHIS
             </h2>
             <span className="header-subtitle text-[9px] text-cyan-400 font-mono tracking-widest uppercase">
               Operativo de Campaña

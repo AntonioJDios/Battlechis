@@ -16,6 +16,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const linkRef = React.useRef(null);
 
   const game = mp.game;
   const isHost = game && mp.userId === game.host_id;
@@ -58,23 +59,31 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const flashCopied = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
   const shareLink = async () => {
     if (!inviteLink) return;
-    const shareData = {
-      title: 'BattleChis',
-      text: `¡Únete a mi partida de BattleChis! Código: ${game.code}`,
-      url: inviteLink,
-    };
+    // 1) Native share sheet (mobile, https only)
     try {
       if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard?.writeText(inviteLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        await navigator.share({ title: 'BattleChis', text: `¡Únete a mi partida! Código: ${game.code}`, url: inviteLink });
+        return;
       }
-    } catch {
-      /* user cancelled share — ignore */
+    } catch { return; /* user cancelled */ }
+    // 2) Clipboard API (https / localhost only)
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteLink);
+        flashCopied();
+        return;
+      }
+    } catch { /* fall through */ }
+    // 3) Legacy fallback for insecure origins (http LAN IP): select + execCommand
+    const el = linkRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+      try { document.execCommand('copy'); flashCopied(); } catch { /* user copies manually */ }
     }
   };
 
@@ -111,8 +120,18 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
               onClick={shareLink}
               className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold mt-3 inline-flex items-center gap-2"
             >
-              <Share2 className="w-4 h-4" /> Compartir enlace
+              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+              {copied ? '¡Copiado!' : 'Compartir enlace'}
             </button>
+            {/* Always-visible, selectable link (works even on insecure http LAN, where clipboard is blocked) */}
+            <input
+              ref={linkRef}
+              readOnly
+              value={inviteLink}
+              onFocus={(e) => e.target.select()}
+              onClick={(e) => e.target.select()}
+              className="w-full mt-2 bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 text-center focus:outline-none focus:border-cyan-500"
+            />
           </div>
 
           <div className="border-t border-slate-800 pt-3">
