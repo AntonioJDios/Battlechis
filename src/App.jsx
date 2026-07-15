@@ -97,6 +97,33 @@ export default function App() {
   const [troopsToMove, setTroopsToMove] = useState(1);
   const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
 
+  // ── PWA install ──
+  const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
+  const [showIosHelp, setShowIosHelp] = useState(false);
+  const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  useEffect(() => {
+    const onBIP = (e) => { e.preventDefault(); setDeferredPrompt(e); };
+    const onInstalled = () => setDeferredPrompt(null);
+    window.addEventListener('beforeinstallprompt', onBIP);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBIP);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      setDeferredPrompt(null);
+    } else if (isIOS) {
+      setShowIosHelp(true);
+    }
+  };
+  const canShowInstall = !isStandalone && (deferredPrompt || isIOS);
+
   // Online multiplayer lobby visibility. If the URL carries ?join=CODE, open the
   // lobby straight into the join view with the code prefilled.
   const initialJoinCode = (() => {
@@ -242,6 +269,32 @@ export default function App() {
           <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-cyan-400"></div>
           <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-cyan-400"></div>
           <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-cyan-400"></div>
+
+          {/* PWA install button */}
+          {canShowInstall && (
+            <button
+              onClick={handleInstall}
+              className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-green-400/60 bg-green-500/10 text-green-300 font-tactical text-[11px] font-bold hover:bg-green-500/20 transition-all"
+            >
+              📲 Instalar app
+            </button>
+          )}
+
+          {/* iOS install instructions */}
+          {showIosHelp && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center p-4 bg-black/85 rounded" onClick={() => setShowIosHelp(false)}>
+              <div className="max-w-xs bg-[#101424] border border-cyan-500/40 rounded-lg p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                <div className="text-3xl mb-2">📲</div>
+                <p className="font-tactical text-sm text-white font-bold mb-2">Instalar en iPhone</p>
+                <p className="font-mono text-[11px] text-gray-300 leading-relaxed">
+                  1. Pulsa el botón <strong>Compartir</strong> <span className="text-cyan-400">⬆️</span> (abajo en Safari)<br/>
+                  2. Elige <strong>"Añadir a pantalla de inicio"</strong><br/>
+                  3. Confirma con <strong>Añadir</strong>
+                </p>
+                <button onClick={() => setShowIosHelp(false)} className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 px-6 text-xs mt-3">Entendido</button>
+              </div>
+            </div>
+          )}
 
           {(() => {
             const total = setupPlayers.length;
