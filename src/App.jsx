@@ -140,9 +140,12 @@ export default function App() {
   }));
 
   // Host presses "Empezar" in the waiting room → seed the board and go online.
-  // The push effect below then broadcasts the initial state to the other players.
-  const handleLaunchOnline = (game) => {
-    const gameSeats = game?.state?.seats ?? seatsConfig;
+  // Re-fetch the freshest seats first, so a just-joined player isn't missed
+  // (avoids: their claim being overwritten and their seat turned into a bot).
+  const handleLaunchOnline = async (game) => {
+    const id = mp.game?.id ?? game?.id;
+    const fresh = id ? await mp.refreshGame(id) : null;
+    const gameSeats = fresh?.state?.seats ?? game?.state?.seats ?? seatsConfig;
     const launchPlayers = gameSeats.map((s) => ({
       faction: s.faction,
       // A human seat nobody claimed → play it as a bot, so the game never
@@ -160,7 +163,9 @@ export default function App() {
     if (!mp.available) return;
     mp.setOnRemoteState((remoteState) => {
       if (!remoteState || remoteState.gameStarted === undefined) return; // ignore lobby-only state
-      lastSyncedRef.current = stableStringify(remoteState); // mark so we don't echo it back
+      const key = stableStringify(remoteState);
+      if (key === lastSyncedRef.current) return; // our own echo (poll/realtime) — don't re-hydrate
+      lastSyncedRef.current = key;
       if (remoteState.gameStarted) setOnlineActive(true);
       hydrate(remoteState);
     });
