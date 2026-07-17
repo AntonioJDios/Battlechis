@@ -100,7 +100,7 @@ Según a dónde llegue tu pelotón:
 Si en tu ruta hacia el destino **cruzas una casilla de camino ocupada por otro jugador** (no aliado), tu pelotón se **detiene** en esa casilla y ese jugador decide:
 
 - **Dejar pasar** 🕊️ — tu pelotón continúa hasta su destino sin desgaste.
-- **Bloquear** ⚔️ — se interpone y comienza un **combate** en esa casilla (tu movimiento se detiene ahí).
+- **Bloquear** ⚔️ — se interpone y comienza un **combate** en esa casilla. Si el atacante **gana**, abre paso y **sus tropas supervivientes continúan hasta el destino original**; si pierde, se retira a su casilla de origen.
 
 En **online**, el defensor tiene **15 segundos** para responder; si no responde, se **bloquea** automáticamente. En **local** decide sin límite de tiempo. Si la casilla la ocupa un bot, la IA decide con criterio (bloquea si tiene tropas suficientes).
 

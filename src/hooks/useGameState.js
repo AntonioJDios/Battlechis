@@ -38,6 +38,7 @@ export function useGameState(online = null) {
   const [surpriseState, setSurpriseState] = useState(null); // {nodeId} — landing on a surprise cell
   const [siegeState, setSiegeState] = useState(null); // {attackerNodeId, defenderNodeId, attackForce} — shield siege before combat
   const [negotiationState, setNegotiationState] = useState(null); // road-crossing negotiation
+  const [pendingAdvance, setPendingAdvance] = useState(null); // {fromId, toId} — continue after winning a block
 
   // Shields: max 1 purchase per turn
   const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
@@ -504,7 +505,7 @@ export function useGameState(online = null) {
   }, [diceRoll, sixCount, boardState, players, currentTurn, checkVictoryConditions, endTurn, addLog]);
 
   // Trigger Combat Screen
-  const initCombat = useCallback((attackerNodeId, defenderNodeId, attackForce) => {
+  const initCombat = useCallback((attackerNodeId, defenderNodeId, attackForce, continueTo = null) => {
     const attacker = boardState[attackerNodeId];
     const defender = boardState[defenderNodeId];
 
@@ -516,6 +517,7 @@ export function useGameState(online = null) {
       defenderFaction: defender.occupyingFaction,
       attackerTroops: attackForce,
       defenderTroops: defender.troops,
+      continueTo, // if set: after winning, survivors march on to this node (road block)
       log: [`Bose de Combate: ${graph[attackerNodeId].name} vs ${graph[defenderNodeId].name}`]
     });
   }, [boardState, graph]);
@@ -582,7 +584,7 @@ export function useGameState(online = null) {
 
   // Resolve a movement into a destination (empty/friendly/conquest/combat/siege).
   // Debits the origin here; does NOT re-check road crossing (caller handles that).
-  const resolveMoveTo = useCallback((originId, destId, troops) => {
+  const resolveMoveTo = useCallback((originId, destId, troops, continueTo = null) => {
     const cp = players[currentTurn];
     const originState = boardState[originId];
     const originType = graph[originId]?.type;
@@ -636,7 +638,7 @@ export function useGameState(online = null) {
     if (destIsBase && (destState.shields || 0) > 0) {
       initSiege(originId, destId, troops); // fortified → siege first
     } else {
-      initCombat(originId, destId, troops);
+      initCombat(originId, destId, troops, continueTo);
     }
   }, [players, currentTurn, boardState, graph, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
 
@@ -684,7 +686,10 @@ export function useGameState(online = null) {
       resolveMoveTo(originId, destId, troops);
     } else {
       addLog('⛔ ¡Bloqueo! Combate en la casilla de cruce.', 'error');
-      resolveMoveTo(originId, conflictId, troops); // conflict cell is enemy → combat
+      // Combat at the conflict cell; if the attacker wins, survivors keep going
+      // to the original destination (unless the block WAS the destination).
+      const onward = (destId && destId !== conflictId) ? destId : null;
+      resolveMoveTo(originId, conflictId, troops, onward);
     }
   }, [negotiationState, resolveMoveTo, addLog]);
 
@@ -1014,14 +1019,25 @@ export function useGameState(online = null) {
       const currentPlayer = players[currentTurn];
       const targetName = graph[defenderNodeId].name;
 
+      const continueTo = combatState.continueTo;
+      let advance = null; // set when the attacker should keep moving after winning a block
+
       if (defTroops <= 0 && attTroops > 0) {
-        const bonus = captureBonus(graph[defenderNodeId]?.type);
-        newBoard[defenderNodeId] = {
-          occupyingFaction: attFaction,
-          troops: attTroops + bonus,
-          isSieged: false
-        };
-        addLog(`VICTORIA: ${currentPlayer.name.toUpperCase()} capturó ${targetName}${bonus > 0 ? ` +${bonus} tropas` : ''}.`, 'success');
+        if (continueTo) {
+          // Won a road block: clear the cell and keep the survivors there so the
+          // dedicated effect can march them on to the original destination.
+          newBoard[defenderNodeId] = { occupyingFaction: attFaction, troops: attTroops, isSieged: false, shields: 0 };
+          advance = { fromId: defenderNodeId, toId: continueTo };
+          addLog(`VICTORIA: ${currentPlayer.name.toUpperCase()} abrió paso en ${targetName} y continúa avanzando.`, 'success');
+        } else {
+          const bonus = captureBonus(graph[defenderNodeId]?.type);
+          newBoard[defenderNodeId] = {
+            occupyingFaction: attFaction,
+            troops: attTroops + bonus,
+            isSieged: false
+          };
+          addLog(`VICTORIA: ${currentPlayer.name.toUpperCase()} capturó ${targetName}${bonus > 0 ? ` +${bonus} tropas` : ''}.`, 'success');
+        }
       } else {
         // Defender wins! Defending troops remain
         newBoard[defenderNodeId] = {
@@ -1032,12 +1048,16 @@ export function useGameState(online = null) {
       }
 
       setBoardState(newBoard);
-      
+
       // Delay closing modal and moving forward
       setTimeout(() => {
         setCombatState(null);
         setPhase('MOVE');
-        resolvePostMovement(newBoard);
+        if (advance) {
+          setPendingAdvance(advance); // continue the move to the original destination
+        } else {
+          resolvePostMovement(newBoard);
+        }
       }, 1500);
     }
   }, [combatState, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
@@ -1091,7 +1111,7 @@ export function useGameState(online = null) {
 
   // --- BOT AI ROTATION TIMER/EFFECT ---
   useEffect(() => {
-    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState) return;
+    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState || pendingAdvance) return;
     if (!botAuthority) return; // online: only the host drives bots
 
     const currentPlayer = players[currentTurn];
@@ -1284,6 +1304,7 @@ export function useGameState(online = null) {
     surpriseState,
     siegeState,
     negotiationState,
+    pendingAdvance,
     botAuthority,
     shieldPurchasedThisTurn,
     placeShield,
@@ -1341,6 +1362,19 @@ export function useGameState(online = null) {
     const timer = setTimeout(() => executeSiegeRoll(), 900);
     return () => clearTimeout(timer);
   }, [siegeState, executeSiegeRoll, players, currentTurn, botAuthority]);
+
+  // --- CONTINUE ADVANCE after winning a road block (survivors march on) ---
+  useEffect(() => {
+    if (!pendingAdvance) return;
+    const { fromId, toId } = pendingAdvance;
+    setPendingAdvance(null);
+    const troops = boardState[fromId]?.troops || 0;
+    if (troops > 0 && toId && graph[toId]) {
+      resolveMoveTo(fromId, toId, troops); // fresh boardState here (post-combat)
+    } else {
+      resolvePostMovement(boardState);
+    }
+  }, [pendingAdvance, boardState, graph, resolveMoveTo, resolvePostMovement]);
 
   // --- BOT DEFENDER: decide a road negotiation on the host, with criterio ---
   // Blocks if it has at least as many troops at the conflict cell as the crosser.
