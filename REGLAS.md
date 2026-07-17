@@ -102,6 +102,8 @@ Si en tu ruta hacia el destino **cruzas una casilla de camino ocupada por otro j
 - **Dejar pasar** 🕊️ — tu pelotón continúa hasta su destino sin desgaste.
 - **Bloquear** ⚔️ — se interpone y comienza un **combate** en esa casilla. Si el atacante **gana**, abre paso y **sus tropas supervivientes continúan hasta el destino original**; si pierde, se retira a su casilla de origen.
 
+Si en la ruta hay **varias casillas enemigas**, se resuelven **una tras otra** (negociación/combate en cada una) hasta alcanzar el destino.
+
 En **online**, el defensor tiene **15 segundos** para responder; si no responde, se **bloquea** automáticamente. En **local** decide sin límite de tiempo. Si la casilla la ocupa un bot, la IA decide con criterio (bloquea si tiene tropas suficientes).
 
 ### 3️⃣ Redistribución (solo jugadores humanos)

@@ -582,15 +582,57 @@ export function useGameState(online = null) {
     }
   }, [siegeState, boardState, players, currentTurn, graph, addLog, resolvePostMovement, initCombat]);
 
-  // Resolve a movement into a destination (empty/friendly/conquest/combat/siege).
-  // Debits the origin here; does NOT re-check road crossing (caller handles that).
-  const resolveMoveTo = useCallback((originId, destId, troops, continueTo = null) => {
+  // Find the first NOT-YET-passed enemy (non-allied) road cell crossed toward a destination.
+  const findCrossingConflict = useCallback((originId, destId, faction, skip = []) => {
+    const path = findShortestPath(graph, originId, destId) || [];
+    for (let i = 1; i < path.length - 1; i++) { // skip origin & destination
+      const pid = path[i];
+      if (skip.includes(pid)) continue;
+      const pn = graph[pid];
+      const ps = boardState[pid];
+      if (!pn || !ps) continue;
+      if (!['path', 'surprise'].includes(pn.type)) continue;
+      if (ps.occupyingFaction === null || ps.occupyingFaction === faction) continue;
+      if (areAllied(faction, ps.occupyingFaction)) continue;
+      return pid;
+    }
+    return null;
+  }, [graph, boardState, areAllied]);
+
+  // Start a road-crossing negotiation (defender decides pass/block).
+  // `passed` carries the cells already resolved earlier in the same move.
+  const initNegotiation = useCallback((info) => {
+    const defender = players.find((p) => p.faction === info.defenderFaction);
+    const defenderIsBot = defender?.isBot;
+    const deadline = (isOnline && !defenderIsBot) ? Date.now() + 15000 : null;
+    setPhase('NEGOTIATION');
+    setNegotiationState({ passed: [], ...info, deadline, response: null });
+    const attackerName = players.find((p) => p.faction === info.attackerFaction)?.name ?? 'Atacante';
+    addLog(`🚧 ${attackerName.toUpperCase()} intenta cruzar por ${graph[info.conflictId]?.name} (${defender?.name}). Esperando decisión…`, 'info');
+  }, [isOnline, players, graph, addLog]);
+
+  // Resolve a movement toward a destination. Re-checks the route for enemy road
+  // cells (skipping already-passed ones) so a platoon fights/negotiates EVERY
+  // enemy cell in its path. opts: { skip: [passed cells], continueTo: {toId, passed} }.
+  const resolveMoveTo = useCallback((originId, destId, troops, opts = {}) => {
+    const { skip = [], continueTo = null } = opts;
     const cp = players[currentTurn];
     const originState = boardState[originId];
     const originType = graph[originId]?.type;
     const destState = boardState[destId];
     const destNode = graph[destId];
     if (!originState || !destState) return;
+
+    // Road crossing: negotiate the next not-yet-passed enemy road cell first.
+    const conflict = findCrossingConflict(originId, destId, cp.faction, skip);
+    if (conflict) {
+      initNegotiation({
+        originId, conflictId: conflict, destId, troops,
+        attackerFaction: cp.faction, defenderFaction: boardState[conflict].occupyingFaction,
+        passed: skip,
+      });
+      return;
+    }
 
     const remaining = originState.troops - troops;
     const board = {
@@ -640,34 +682,7 @@ export function useGameState(online = null) {
     } else {
       initCombat(originId, destId, troops, continueTo);
     }
-  }, [players, currentTurn, boardState, graph, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
-
-  // Find the first enemy (non-allied) road cell crossed on the way to a destination.
-  const findCrossingConflict = useCallback((originId, destId, faction) => {
-    const path = findShortestPath(graph, originId, destId) || [];
-    for (let i = 1; i < path.length - 1; i++) { // skip origin & destination
-      const pid = path[i];
-      const pn = graph[pid];
-      const ps = boardState[pid];
-      if (!pn || !ps) continue;
-      if (!['path', 'surprise'].includes(pn.type)) continue;
-      if (ps.occupyingFaction === null || ps.occupyingFaction === faction) continue;
-      if (areAllied(faction, ps.occupyingFaction)) continue;
-      return pid;
-    }
-    return null;
-  }, [graph, boardState, areAllied]);
-
-  // Start a road-crossing negotiation (defender decides pass/block).
-  const initNegotiation = useCallback((info) => {
-    const defender = players.find((p) => p.faction === info.defenderFaction);
-    const defenderIsBot = defender?.isBot;
-    const deadline = (isOnline && !defenderIsBot) ? Date.now() + 15000 : null;
-    setPhase('NEGOTIATION');
-    setNegotiationState({ ...info, deadline, response: null });
-    const attackerName = players.find((p) => p.faction === info.attackerFaction)?.name ?? 'Atacante';
-    addLog(`🚧 ${attackerName.toUpperCase()} intenta cruzar por ${graph[info.conflictId]?.name} (${defender?.name}). Esperando decisión…`, 'info');
-  }, [isOnline, players, graph, addLog]);
+  }, [players, currentTurn, boardState, graph, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
 
   // Defender's answer: 'pass' (let through) or 'block' (fight).
   const respondNegotiation = useCallback((response) => {
@@ -677,19 +692,21 @@ export function useGameState(online = null) {
   // Resolve the negotiation (attacker-authoritative, or on timeout). Null response = block.
   const resolveNegotiation = useCallback(() => {
     if (!negotiationState) return;
-    const { originId, destId, conflictId, troops, response } = negotiationState;
+    const { originId, destId, conflictId, troops, response, passed = [] } = negotiationState;
     const effective = response || 'block';
+    const nowPassed = [...passed, conflictId];
     setNegotiationState(null);
     setPhase('MOVE');
     if (effective === 'pass') {
       addLog('✅ Paso franco concedido. El pelotón continúa.', 'info');
-      resolveMoveTo(originId, destId, troops);
+      // Continue toward the destination, skipping this (still-occupied) cell.
+      resolveMoveTo(originId, destId, troops, { skip: nowPassed });
     } else {
       addLog('⛔ ¡Bloqueo! Combate en la casilla de cruce.', 'error');
-      // Combat at the conflict cell; if the attacker wins, survivors keep going
-      // to the original destination (unless the block WAS the destination).
-      const onward = (destId && destId !== conflictId) ? destId : null;
-      resolveMoveTo(originId, conflictId, troops, onward);
+      // Fight at the conflict cell; if we win, survivors march on to the destination
+      // and keep fighting any remaining enemy cells on the way.
+      const onward = (destId && destId !== conflictId) ? { toId: destId, passed: nowPassed } : null;
+      resolveMoveTo(originId, conflictId, troops, { skip: passed, continueTo: onward });
     }
   }, [negotiationState, resolveMoveTo, addLog]);
 
@@ -859,20 +876,9 @@ export function useGameState(online = null) {
 
         SoundManager.playMove();
 
-        // Road-crossing check: if the route passes through an enemy road cell, negotiate.
-        const conflictId = findCrossingConflict(selectedNode, nodeId, currentPlayer.faction);
-        if (conflictId) {
-          initNegotiation({
-            originId: selectedNode,
-            conflictId,
-            destId: nodeId,
-            troops: moveTroops,
-            attackerFaction: currentPlayer.faction,
-            defenderFaction: boardState[conflictId].occupyingFaction,
-          });
-        } else {
-          resolveMoveTo(selectedNode, nodeId, moveTroops);
-        }
+        // resolveMoveTo re-checks the route for enemy road cells and negotiates
+        // each one (fighting through all of them) before resolving the destination.
+        resolveMoveTo(selectedNode, nodeId, moveTroops);
 
         setSelectedNode(null);
         setHighlightedNodes([]);
@@ -1019,15 +1025,15 @@ export function useGameState(online = null) {
       const currentPlayer = players[currentTurn];
       const targetName = graph[defenderNodeId].name;
 
-      const continueTo = combatState.continueTo;
+      const continueTo = combatState.continueTo; // { toId, passed } | null
       let advance = null; // set when the attacker should keep moving after winning a block
 
       if (defTroops <= 0 && attTroops > 0) {
-        if (continueTo) {
+        if (continueTo && continueTo.toId) {
           // Won a road block: clear the cell and keep the survivors there so the
-          // dedicated effect can march them on to the original destination.
+          // dedicated effect can march them on toward the original destination.
           newBoard[defenderNodeId] = { occupyingFaction: attFaction, troops: attTroops, isSieged: false, shields: 0 };
-          advance = { fromId: defenderNodeId, toId: continueTo };
+          advance = { fromId: defenderNodeId, toId: continueTo.toId, passed: continueTo.passed || [] };
           addLog(`VICTORIA: ${currentPlayer.name.toUpperCase()} abrió paso en ${targetName} y continúa avanzando.`, 'success');
         } else {
           const bonus = captureBonus(graph[defenderNodeId]?.type);
@@ -1259,21 +1265,9 @@ export function useGameState(online = null) {
 
           setTimeout(() => {
             const moveTroops = boardState[bestMove.originId].troops - 1;
-            // Road-crossing check (bot may run into a human's road cell → negotiation)
-            const conflictId = findCrossingConflict(bestMove.originId, bestMove.targetId, currentPlayer.faction);
-            if (conflictId) {
-              initNegotiation({
-                originId: bestMove.originId,
-                conflictId,
-                destId: bestMove.targetId,
-                troops: moveTroops,
-                attackerFaction: currentPlayer.faction,
-                defenderFaction: boardState[conflictId].occupyingFaction,
-              });
-            } else {
-              // resolveMoveTo handles empty/friendly/conquest/combat/siege/surprise
-              resolveMoveTo(bestMove.originId, bestMove.targetId, moveTroops);
-            }
+            // resolveMoveTo handles road-crossing negotiation (all enemy cells),
+            // plus empty/friendly/conquest/combat/siege/surprise at the destination.
+            resolveMoveTo(bestMove.originId, bestMove.targetId, moveTroops);
           }, 1000);
         } else {
           // No possible moves (all blocked), end turn
@@ -1363,14 +1357,15 @@ export function useGameState(online = null) {
     return () => clearTimeout(timer);
   }, [siegeState, executeSiegeRoll, players, currentTurn, botAuthority]);
 
-  // --- CONTINUE ADVANCE after winning a road block (survivors march on) ---
+  // --- CONTINUE ADVANCE after winning a road block (survivors march on, and keep
+  //     fighting/negotiating any remaining enemy cells until the destination) ---
   useEffect(() => {
     if (!pendingAdvance) return;
-    const { fromId, toId } = pendingAdvance;
+    const { fromId, toId, passed = [] } = pendingAdvance;
     setPendingAdvance(null);
     const troops = boardState[fromId]?.troops || 0;
     if (troops > 0 && toId && graph[toId]) {
-      resolveMoveTo(fromId, toId, troops); // fresh boardState here (post-combat)
+      resolveMoveTo(fromId, toId, troops, { skip: passed }); // fresh boardState (post-combat)
     } else {
       resolvePostMovement(boardState);
     }
