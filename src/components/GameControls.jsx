@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
 
 export default function GameControls({
@@ -26,6 +26,7 @@ export default function GameControls({
   const factionRgb = FACTIONS[currentPlayer.faction]?.rgb ?? '0, 240, 255';
   const fc = (a) => `rgba(${factionRgb}, ${a})`; // faction color with alpha
   const isBot = currentPlayer.isBot;
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div
@@ -37,40 +38,47 @@ export default function GameControls({
         background: 'rgba(13,16,26,0.97)',
         border: `1px solid ${factionColor}40`,
         borderRadius: '12px',
-        padding: '10px 14px',
+        padding: collapsed ? '6px 8px' : '10px 14px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
         gap: '8px',
         boxShadow: `0 0 24px ${factionColor}20, 0 8px 32px rgba(0,0,0,0.8)`,
         backdropFilter: 'blur(10px)',
-        width: '200px',
+        width: collapsed ? 'auto' : '200px',
+        maxHeight: 'calc(100vh - 76px)',
+        overflowY: 'auto',
       }}
     >
-      {/* Phase badge */}
+      {/* Phase badge + collapse toggle */}
       <div style={{
         background: `${factionColor}18`,
         border: `1px solid ${factionColor}40`,
         borderRadius: '6px',
-        padding: '4px 10px',
+        padding: '4px 8px',
         display: 'flex',
         alignItems: 'center',
         gap: '6px',
         flexShrink: 0,
       }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: factionColor }} className="animate-pulse" />
-        <span className="font-tactical text-[10px] font-bold uppercase tracking-wider" style={{ color: factionColor }}>
+        <span className="font-tactical text-[10px] font-bold uppercase tracking-wider" style={{ color: factionColor, flex: 1, whiteSpace: 'nowrap' }}>
           {currentPlayer.name.split(' ')[0]} · {phase}
         </span>
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          title={collapsed ? 'Mostrar panel' : 'Ocultar panel (para pinchar el tablero)'}
+          style={{ width: 20, height: 20, borderRadius: 4, border: `1px solid ${factionColor}55`, background: 'transparent', color: factionColor, fontSize: 13, lineHeight: '18px', cursor: 'pointer', flexShrink: 0, padding: 0 }}
+        >{collapsed ? '▸' : '▾'}</button>
       </div>
 
       {/* ── BOT turn ── */}
-      {isBot && (
+      {!collapsed && isBot && (
         <span className="font-mono text-[10px] text-cyan-400 animate-pulse">🤖 IA procesando...</span>
       )}
 
       {/* ── RECRUIT phase ── */}
-      {!isBot && phase === 'RECRUIT' && (
+      {!collapsed && !isBot && phase === 'RECRUIT' && (
         <div style={{
           background: fc(0.12),
           border: `1px solid ${fc(0.5)}`,
@@ -97,11 +105,12 @@ export default function GameControls({
           </div>
 
           <p className="font-mono text-[9px] text-gray-500">Elige la cantidad y haz clic en una base parpadeante. Repite para repartir entre varias bases.</p>
+          <p className="font-mono text-[9px] text-gray-600">Al terminar los refuerzos podrás fortificar una base con un escudo.</p>
         </div>
       )}
 
       {/* ── MOVE phase ── */}
-      {!isBot && phase === 'MOVE' && (
+      {!collapsed && !isBot && phase === 'MOVE' && (
         <>
           {/* Dice */}
           {diceRoll === null ? (
@@ -190,7 +199,7 @@ export default function GameControls({
       )}
 
       {/* ── REDISTRIBUTE phase ── */}
-      {!isBot && phase === 'REDISTRIBUTE' && (
+      {!collapsed && !isBot && phase === 'REDISTRIBUTE' && (
         <>
           <div style={{
             background: 'rgba(99,102,241,0.1)',

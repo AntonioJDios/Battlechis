@@ -36,6 +36,11 @@ export function useGameState(online = null) {
   const [combatState, setCombatState] = useState(null);
   const [conquestState, setConquestState] = useState(null);
   const [surpriseState, setSurpriseState] = useState(null); // {nodeId} — landing on a surprise cell
+  const [siegeState, setSiegeState] = useState(null); // {attackerNodeId, defenderNodeId, attackForce} — shield siege before combat
+  const [negotiationState, setNegotiationState] = useState(null); // road-crossing negotiation
+
+  // Shields: max 1 purchase per turn
+  const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
 
   // Add a message to the tactical console log
   const addLog = useCallback((message, type = 'info') => {
@@ -68,21 +73,24 @@ export function useGameState(online = null) {
           initialBoard[nodeId] = {
             occupyingFaction: owner.faction,
             troops: 5,
-            isSieged: false
+            isSieged: false,
+            shields: 0
           };
         } else {
           // Unassigned HQ starts as unoccupied base
           initialBoard[nodeId] = {
             occupyingFaction: null,
             troops: 2,
-            isSieged: false
+            isSieged: false,
+            shields: 0
           };
         }
       } else {
         initialBoard[nodeId] = {
           occupyingFaction: null,
           troops: 0,
-          isSieged: false
+          isSieged: false,
+          shields: 0
         };
       }
     });
@@ -93,6 +101,7 @@ export function useGameState(online = null) {
     setDiceRoll(null);
     setPhase('RECRUIT');
     setGameStarted(true);
+    setShieldPurchasedThisTurn(false);
 
     const firstPlayer = gamePlayers[0];
     const firstBases = Object.keys(initialBoard).filter(id => {
@@ -237,6 +246,16 @@ export function useGameState(online = null) {
     return Math.max(1, count * 3);
   }, [graph, boardState]);
 
+  // Total troops a faction controls across the whole board (for shield eligibility)
+  const getTotalTroops = useCallback((faction, currentBoard = boardState) => {
+    let total = 0;
+    Object.keys(currentBoard).forEach(nodeId => {
+      const s = currentBoard[nodeId];
+      if (s?.occupyingFaction === faction) total += (s.troops || 0);
+    });
+    return total;
+  }, [boardState]);
+
   // Phase transition: End Turn
   const endTurn = useCallback(() => {
     if (phase === 'SETUP' || phase === 'GAME_OVER') return;
@@ -309,6 +328,7 @@ export function useGameState(online = null) {
     setSelectedNode(null);
     setHighlightedNodes([]);
     setPhase('RECRUIT');
+    setShieldPurchasedThisTurn(false);
 
     const nextPlayer = players[nextIdx];
     const recruits = getBasesControlledCount(nextPlayer.faction);
@@ -345,11 +365,69 @@ export function useGameState(online = null) {
     SoundManager.playMove();
 
     if (remaining <= 0) {
+      // After deploying all reinforcements, offer the FORTIFY step (buy a shield)
+      // to human players who are eligible; otherwise go straight to MOVE.
+      const faction = currentPlayer.faction;
+      const canFortify = !currentPlayer.isBot && !shieldPurchasedThisTurn &&
+        getTotalTroops(faction, newBoard) >= 10 &&
+        Object.keys(newBoard).some(id => {
+          const n = graph[id]; const s = newBoard[id];
+          return s.occupyingFaction === faction && (n.type === 'hq' || n.type === 'neutral' || n.type === 'center')
+            && s.troops >= 6 && (s.shields || 0) < 3;
+        });
+      setHighlightedNodes([]);
+      if (canFortify) {
+        setPhase('FORTIFY');
+        addLog("🛡️ FASE DE FORTIFICACIÓN: puedes canjear tropas de una base por 1 escudo.", "info");
+      } else {
+        setPhase('MOVE');
+        addLog("FASE DE MOVIMIENTO: Lanza el dado táctico.", "info");
+      }
+    }
+  }, [boardState, recruitmentTroops, players, currentTurn, phase, graph, addLog, shieldPurchasedThisTurn, getTotalTroops]);
+
+  // Fortify a base with 1 shield during the FORTIFY step (after reinforcing, before
+  // rolling). The 5-soldier cost is taken FROM THAT BASE's troops (must keep ≥1).
+  // Requires ≥10 total troops. Max 1 shield/turn, max 3/base. Then → MOVE.
+  const placeShield = useCallback((nodeId) => {
+    if (phase !== 'FORTIFY' && phase !== 'RECRUIT') return;
+    const node = graph[nodeId];
+    const state = boardState[nodeId];
+    const currentPlayer = players[currentTurn];
+    const isBase = node?.type === 'hq' || node?.type === 'neutral' || node?.type === 'center';
+
+    if (shieldPurchasedThisTurn) { addLog("Solo puedes fortificar con 1 escudo por turno.", "error"); return; }
+    if (!isBase || !state || state.occupyingFaction !== currentPlayer.faction) {
+      addLog("Los escudos solo se colocan en tus propias bases.", "error"); return;
+    }
+    if ((state.shields || 0) >= 3) { addLog("Esta base ya tiene el máximo de 3 escudos.", "error"); return; }
+    if (getTotalTroops(currentPlayer.faction) < 10) {
+      addLog("Necesitas al menos 10 tropas en el tablero para fortificar.", "error"); return;
+    }
+    if (state.troops < 6) {
+      addLog("Esta base necesita al menos 6 tropas (gastas 5 y debe quedar 1 de guarnición).", "error"); return;
+    }
+
+    const newBoard = { ...boardState, [nodeId]: { ...state, troops: state.troops - 5, shields: (state.shields || 0) + 1 } };
+    setBoardState(newBoard);
+    setShieldPurchasedThisTurn(true);
+    addLog(`🛡️ ${currentPlayer.name.toUpperCase()} fortificó ${node.name} (−5 tropas → 1 escudo).`, 'success');
+    SoundManager.playConquest?.();
+    // From the dedicated FORTIFY step, continue to movement. (Bots call this during
+    // RECRUIT before reinforcing, so they must NOT skip ahead.)
+    if (phase === 'FORTIFY') {
       setPhase('MOVE');
       setHighlightedNodes([]);
       addLog("FASE DE MOVIMIENTO: Lanza el dado táctico.", "info");
     }
-  }, [boardState, recruitmentTroops, players, currentTurn, phase, graph, addLog]);
+  }, [phase, graph, boardState, players, currentTurn, shieldPurchasedThisTurn, getTotalTroops, addLog]);
+
+  // Skip fortification → go straight to the movement phase.
+  const skipFortify = useCallback(() => {
+    setPhase('MOVE');
+    setHighlightedNodes([]);
+    addLog("FASE DE MOVIMIENTO: Lanza el dado táctico.", "info");
+  }, [addLog]);
 
   // Roll movement die
   const rollMovement = useCallback(() => {
@@ -453,6 +531,162 @@ export function useGameState(online = null) {
       log: [`Iniciando asalto a base neutral ${graph[nodeId].name}`]
     });
   }, [graph]);
+
+  // Trigger Siege Screen (attacking a base that has shields)
+  const initSiege = useCallback((attackerNodeId, defenderNodeId, attackForce) => {
+    setPhase('SIEGE');
+    setSiegeState({
+      attackerNodeId,
+      defenderNodeId,
+      attackForce,
+      shields: boardState[defenderNodeId]?.shields || 0,
+    });
+  }, [boardState]);
+
+  // Resolve the siege roll: 1→-1 shield, 2-3→-2, 4-6→-3 (all).
+  // If shields remain → attack fails, troops retreat to origin.
+  // If all shields fall → open melee combat.
+  const executeSiegeRoll = useCallback((rollValue = null) => {
+    if (!siegeState) return;
+    SoundManager.playRoll();
+    const roll = rollValue || Math.floor(Math.random() * 6) + 1;
+    const { attackerNodeId, defenderNodeId, attackForce } = siegeState;
+    const currentPlayer = players[currentTurn];
+    const destName = graph[defenderNodeId]?.name ?? 'la base';
+    const before = boardState[defenderNodeId]?.shields || 0;
+    const destroyed = roll === 1 ? 1 : roll <= 3 ? 2 : 3;
+    const remaining = Math.max(0, before - destroyed);
+
+    const newBoard = { ...boardState, [defenderNodeId]: { ...boardState[defenderNodeId], shields: remaining } };
+
+    if (remaining > 0) {
+      // Assault repelled: attacking troops retreat to their origin.
+      if (newBoard[attackerNodeId]) {
+        newBoard[attackerNodeId] = { ...newBoard[attackerNodeId], troops: newBoard[attackerNodeId].troops + attackForce };
+      }
+      setBoardState(newBoard);
+      setSiegeState(null);
+      addLog(`🛡️ ASEDIO (dado ${roll}): destruidos ${destroyed} escudo(s) en ${destName}, aún resisten ${remaining}. El asalto se repliega.`, 'error');
+      SoundManager.playSiegeFail?.();
+      setPhase('MOVE');
+      resolvePostMovement(newBoard);
+    } else {
+      // Breach! All shields down → melee combat.
+      setBoardState(newBoard);
+      setSiegeState(null);
+      addLog(`💥 ASEDIO (dado ${roll}): ¡murallas derribadas en ${destName}! Comienza el combate.`, 'success');
+      SoundManager.playExplosion?.();
+      initCombat(attackerNodeId, defenderNodeId, attackForce);
+    }
+  }, [siegeState, boardState, players, currentTurn, graph, addLog, resolvePostMovement, initCombat]);
+
+  // Resolve a movement into a destination (empty/friendly/conquest/combat/siege).
+  // Debits the origin here; does NOT re-check road crossing (caller handles that).
+  const resolveMoveTo = useCallback((originId, destId, troops) => {
+    const cp = players[currentTurn];
+    const originState = boardState[originId];
+    const originType = graph[originId]?.type;
+    const destState = boardState[destId];
+    const destNode = graph[destId];
+    if (!originState || !destState) return;
+
+    const remaining = originState.troops - troops;
+    const board = {
+      ...boardState,
+      [originId]: {
+        ...originState,
+        troops: remaining,
+        occupyingFaction: (['path', 'surprise'].includes(originType) && remaining <= 0) ? null : originState.occupyingFaction,
+      },
+    };
+
+    // Empty or friendly destination
+    if (destState.occupyingFaction === null || destState.occupyingFaction === cp.faction) {
+      if ((destNode.type === 'center' || destNode.type === 'neutral') && destState.occupyingFaction === null) {
+        setBoardState(board);
+        initConquest(destId, troops, originId);
+      } else {
+        board[destId] = {
+          ...destState,
+          occupyingFaction: cp.faction,
+          troops: (destState.occupyingFaction === cp.faction ? destState.troops : 0) + troops,
+        };
+        setBoardState(board);
+        addLog(`${cp.name.toUpperCase()} desplazó pelotón a ${destNode.name}.`, 'info');
+        if (destNode.type === 'surprise') {
+          setPhase('SURPRISE');
+          setSurpriseState({ nodeId: destId });
+        } else {
+          resolvePostMovement(board);
+        }
+      }
+      return;
+    }
+
+    // Enemy destination
+    if (destState.troops <= 0) {
+      board[destId] = { occupyingFaction: cp.faction, troops, isSieged: false, shields: 0 };
+      setBoardState(board);
+      addLog(`${cp.name.toUpperCase()} tomó ${destNode.name} sin resistencia.`, 'info');
+      resolvePostMovement(board);
+      return;
+    }
+    const destIsBase = ['hq', 'neutral', 'center'].includes(destNode.type);
+    setBoardState(board);
+    if (destIsBase && (destState.shields || 0) > 0) {
+      initSiege(originId, destId, troops); // fortified → siege first
+    } else {
+      initCombat(originId, destId, troops);
+    }
+  }, [players, currentTurn, boardState, graph, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
+
+  // Find the first enemy (non-allied) road cell crossed on the way to a destination.
+  const findCrossingConflict = useCallback((originId, destId, faction) => {
+    const path = findShortestPath(graph, originId, destId) || [];
+    for (let i = 1; i < path.length - 1; i++) { // skip origin & destination
+      const pid = path[i];
+      const pn = graph[pid];
+      const ps = boardState[pid];
+      if (!pn || !ps) continue;
+      if (!['path', 'surprise'].includes(pn.type)) continue;
+      if (ps.occupyingFaction === null || ps.occupyingFaction === faction) continue;
+      if (areAllied(faction, ps.occupyingFaction)) continue;
+      return pid;
+    }
+    return null;
+  }, [graph, boardState, areAllied]);
+
+  // Start a road-crossing negotiation (defender decides pass/block).
+  const initNegotiation = useCallback((info) => {
+    const defender = players.find((p) => p.faction === info.defenderFaction);
+    const defenderIsBot = defender?.isBot;
+    const deadline = (isOnline && !defenderIsBot) ? Date.now() + 15000 : null;
+    setPhase('NEGOTIATION');
+    setNegotiationState({ ...info, deadline, response: null });
+    const attackerName = players.find((p) => p.faction === info.attackerFaction)?.name ?? 'Atacante';
+    addLog(`🚧 ${attackerName.toUpperCase()} intenta cruzar por ${graph[info.conflictId]?.name} (${defender?.name}). Esperando decisión…`, 'info');
+  }, [isOnline, players, graph, addLog]);
+
+  // Defender's answer: 'pass' (let through) or 'block' (fight).
+  const respondNegotiation = useCallback((response) => {
+    setNegotiationState((prev) => (prev ? { ...prev, response } : prev));
+  }, []);
+
+  // Resolve the negotiation (attacker-authoritative, or on timeout). Null response = block.
+  const resolveNegotiation = useCallback(() => {
+    if (!negotiationState) return;
+    const { originId, destId, conflictId, troops, response } = negotiationState;
+    const effective = response || 'block';
+    setNegotiationState(null);
+    setPhase('MOVE');
+    if (effective === 'pass') {
+      addLog('✅ Paso franco concedido. El pelotón continúa.', 'info');
+      resolveMoveTo(originId, destId, troops);
+    } else {
+      addLog('⛔ ¡Bloqueo! Combate en la casilla de cruce.', 'error');
+      resolveMoveTo(originId, conflictId, troops); // conflict cell is enemy → combat
+    }
+  }, [negotiationState, resolveMoveTo, addLog]);
 
   // Handle Node selection / Movement execution
   const handleNodeClick = useCallback((nodeId, customTroops = null) => {
@@ -592,22 +826,17 @@ export function useGameState(online = null) {
         const maxMove = isBase ? originState.troops - 1 : originState.troops;
         const moveTroops = customTroops !== null ? Math.min(Math.max(1, customTroops), maxMove) : maxMove;
 
-        // Update origin node (leave remaining troops behind)
-        const remainingMove = originState.troops - moveTroops;
-        const updatedBoard = {
-          ...boardState,
-          [selectedNode]: {
-            ...originState,
-            troops: remainingMove,
-            // Path/surprise nodes with 0 troops become neutral (free)
-            occupyingFaction: (['path', 'surprise'].includes(graph[selectedNode]?.type) && remainingMove <= 0) ? null : originState.occupyingFaction
-          }
-        };
-
-        SoundManager.playMove();
-
-        // Check destination type
         const destState = boardState[nodeId];
+
+        // Block attack on allied faction (only if the destination itself is the ally)
+        if (destState.occupyingFaction !== null && destState.occupyingFaction !== currentPlayer.faction
+            && areAllied(currentPlayer.faction, destState.occupyingFaction)) {
+          const allyName = players.find(p => p.faction === destState.occupyingFaction)?.name ?? 'aliado';
+          addLog(`🤝 ALIANZA ACTIVA: No puedes atacar a ${allyName}. Rompe la alianza primero.`, 'error');
+          setSelectedNode(null);
+          setHighlightedNodes([]);
+          return;
+        }
 
         // NÚCLEO requires 3 satellite bases (HQ + neutral, not center itself)
         if (node.type === 'center') {
@@ -623,52 +852,21 @@ export function useGameState(online = null) {
           }
         }
 
-        // 1. Destination is empty or friendly
-        if (destState.occupyingFaction === null || destState.occupyingFaction === currentPlayer.faction) {
-          // Empty base: always requires conquest roll (1=fail, 2-6=capture)
-          if ((node.type === 'center' || node.type === 'neutral') && destState.occupyingFaction === null) {
-            setBoardState(updatedBoard);
-            initConquest(nodeId, moveTroops, selectedNode);
-          } else {
-            // Friendly merge or empty path node occupy
-            updatedBoard[nodeId] = {
-              occupyingFaction: currentPlayer.faction,
-              troops: (destState.occupyingFaction === currentPlayer.faction ? destState.troops : 0) + moveTroops,
-              isSieged: false
-            };
-            setBoardState(updatedBoard);
-            addLog(`${currentPlayer.name.toUpperCase()} desplazó pelotón a ${node.name}.`, 'info');
+        SoundManager.playMove();
 
-            if (node.type === 'surprise') {
-              // Landing on a surprise cell: draw a card before continuing
-              setPhase('SURPRISE');
-              setSurpriseState({ nodeId });
-            } else {
-              // Handle Roll again rules (Rule of 6)
-              resolvePostMovement(updatedBoard);
-            }
-          }
-        }
-        // 2. Destination is enemy occupied (Path or Base)
-        else {
-          // Block attack on allied faction
-          if (areAllied(currentPlayer.faction, destState.occupyingFaction)) {
-            const allyName = players.find(p => p.faction === destState.occupyingFaction)?.name ?? 'aliado';
-            addLog(`🤝 ALIANZA ACTIVA: No puedes atacar a ${allyName}. Rompe la alianza primero.`, 'error');
-            setSelectedNode(null);
-            setHighlightedNodes([]);
-            return;
-          }
-          // Safety: node marked as owned but with 0 troops → free capture, no combat
-          if (destState.troops <= 0) {
-            updatedBoard[nodeId] = { occupyingFaction: currentPlayer.faction, troops: moveTroops, isSieged: false };
-            setBoardState(updatedBoard);
-            addLog(`${currentPlayer.name.toUpperCase()} tomó ${node.name} sin resistencia.`, 'info');
-            resolvePostMovement(updatedBoard);
-          } else {
-            setBoardState(updatedBoard);
-            initCombat(selectedNode, nodeId, moveTroops);
-          }
+        // Road-crossing check: if the route passes through an enemy road cell, negotiate.
+        const conflictId = findCrossingConflict(selectedNode, nodeId, currentPlayer.faction);
+        if (conflictId) {
+          initNegotiation({
+            originId: selectedNode,
+            conflictId,
+            destId: nodeId,
+            troops: moveTroops,
+            attackerFaction: currentPlayer.faction,
+            defenderFaction: boardState[conflictId].occupyingFaction,
+          });
+        } else {
+          resolveMoveTo(selectedNode, nodeId, moveTroops);
         }
 
         setSelectedNode(null);
@@ -679,7 +877,7 @@ export function useGameState(online = null) {
         setHighlightedNodes([]);
       }
     }
-  }, [phase, currentTurn, players, boardState, diceRoll, selectedNode, highlightedNodes, graph, reinforceNode, initCombat, initConquest, addLog, recruitmentTroops, resolvePostMovement, areAllied]);
+  }, [phase, currentTurn, players, boardState, diceRoll, selectedNode, highlightedNodes, graph, reinforceNode, addLog, recruitmentTroops, areAllied, findCrossingConflict, initNegotiation, resolveMoveTo, initConquest]);
 
   // --- SURPRISE CELL: draw a card, apply troops delta immediately, then continue turn ---
   const executeSurpriseDraw = useCallback((cardValue = null) => {
@@ -893,7 +1091,7 @@ export function useGameState(online = null) {
 
   // --- BOT AI ROTATION TIMER/EFFECT ---
   useEffect(() => {
-    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState) return;
+    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState) return;
     if (!botAuthority) return; // online: only the host drives bots
 
     const currentPlayer = players[currentTurn];
@@ -901,6 +1099,9 @@ export function useGameState(online = null) {
 
     // AI Bot execution block
     const botTimer = setTimeout(() => {
+      // Bots fortify during RECRUIT (below); they never use the human FORTIFY step.
+      if (phase === 'FORTIFY') { setPhase('MOVE'); return; }
+
       // 0. REDISTRIBUTE PHASE — bots skip
       if (phase === 'REDISTRIBUTE') {
         endTurn();
@@ -913,28 +1114,40 @@ export function useGameState(online = null) {
         const myBases = Object.keys(boardState).filter(nodeId => {
           const state = boardState[nodeId];
           const node = graph[nodeId];
-          return state.occupyingFaction === currentPlayer.faction && 
+          return state.occupyingFaction === currentPlayer.faction &&
             (node.type === 'hq' || node.type === 'neutral' || node.type === 'center');
         });
 
-        if (myBases.length > 0) {
-          // Put all recruits on a random controlled base (or weakest base)
-          // Find weakest base
-          let weakestBase = myBases[0];
-          let minTroops = boardState[weakestBase].troops;
-          myBases.forEach(baseId => {
-            if (boardState[baseId].troops < minTroops) {
-              minTroops = boardState[baseId].troops;
-              weakestBase = baseId;
-            }
-          });
-
-          reinforceNode(weakestBase, recruitmentTroops);
-        } else {
+        if (myBases.length === 0) {
           // No bases owned (extreme edge case before elimination), just advance
           setRecruitmentTroops(0);
           setPhase('MOVE');
+          return;
         }
+
+        // Optionally fortify a valuable base first (≥10 total troops, base has ≥6 troops
+        // to pay the 5-soldier cost, <3 shields). Own tick (return) to avoid state clobber.
+        if (!shieldPurchasedThisTurn && getTotalTroops(currentPlayer.faction) >= 10) {
+          const priority = (t) => (graph[t].type === 'center' ? 0 : graph[t].type === 'hq' ? 1 : 2);
+          const shieldTarget = myBases
+            .filter(id => (boardState[id].shields || 0) < 3 && boardState[id].troops >= 6)
+            .sort((a, b) => (priority(a) - priority(b)) || (boardState[b].troops - boardState[a].troops))[0];
+          if (shieldTarget) {
+            placeShield(shieldTarget);
+            return;
+          }
+        }
+
+        // Reinforce the weakest base with the remaining recruits
+        let weakestBase = myBases[0];
+        let minTroops = boardState[weakestBase].troops;
+        myBases.forEach(baseId => {
+          if (boardState[baseId].troops < minTroops) {
+            minTroops = boardState[baseId].troops;
+            weakestBase = baseId;
+          }
+        });
+        reinforceNode(weakestBase, recruitmentTroops);
       }
 
       // 2. MOVE PHASE
@@ -1025,63 +1238,21 @@ export function useGameState(online = null) {
           addLog(`BOT MOVIMIENTO: ${currentPlayer.name.toUpperCase()} selecciona ruta desde ${graph[bestMove.originId].name}.`);
 
           setTimeout(() => {
-            const originState = boardState[bestMove.originId];
-            const moveTroops = originState.troops - 1;
-            const updatedBoard = {
-              ...boardState,
-              [bestMove.originId]: { ...originState, troops: 1 }
-            };
-
-            const destState = boardState[bestMove.targetId];
-            const destNode = graph[bestMove.targetId];
-
-            if (destState.occupyingFaction === null) {
-              if (destNode.type === 'center' || destNode.type === 'neutral') {
-                // Always use conquest roll (1=fail/retreat, 2-6=capture)
-                setBoardState(updatedBoard);
-                initConquest(bestMove.targetId, moveTroops, bestMove.originId);
-                // auto-resolve handled by the dedicated useEffect below
-              } else {
-                updatedBoard[bestMove.targetId] = {
-                  occupyingFaction: currentPlayer.faction,
-                  troops: moveTroops,
-                  isSieged: false
-                };
-                setBoardState(updatedBoard);
-                addLog(`${currentPlayer.name.toUpperCase()} desplazó pelotón a ${destNode.name}.`, 'info');
-                if (destNode.type === 'surprise') {
-                  setPhase('SURPRISE');
-                  setSurpriseState({ nodeId: bestMove.targetId });
-                } else {
-                  setTimeout(() => resolvePostMovement(updatedBoard), 1000);
-                }
-              }
-            } else if (destState.occupyingFaction === currentPlayer.faction) {
-              updatedBoard[bestMove.targetId] = {
-                occupyingFaction: currentPlayer.faction,
-                troops: destState.troops + moveTroops,
-                isSieged: false
-              };
-              setBoardState(updatedBoard);
-              addLog(`${currentPlayer.name.toUpperCase()} reforzó pelotón en ${destNode.name}.`, 'info');
-              if (destNode.type === 'surprise') {
-                setPhase('SURPRISE');
-                setSurpriseState({ nodeId: bestMove.targetId });
-              } else {
-                setTimeout(() => resolvePostMovement(updatedBoard), 1000);
-              }
+            const moveTroops = boardState[bestMove.originId].troops - 1;
+            // Road-crossing check (bot may run into a human's road cell → negotiation)
+            const conflictId = findCrossingConflict(bestMove.originId, bestMove.targetId, currentPlayer.faction);
+            if (conflictId) {
+              initNegotiation({
+                originId: bestMove.originId,
+                conflictId,
+                destId: bestMove.targetId,
+                troops: moveTroops,
+                attackerFaction: currentPlayer.faction,
+                defenderFaction: boardState[conflictId].occupyingFaction,
+              });
             } else {
-              // Safety: node marked as owned but with 0 troops → free capture
-              if (destState.troops <= 0) {
-                updatedBoard[bestMove.targetId] = { occupyingFaction: currentPlayer.faction, troops: moveTroops, isSieged: false };
-                setBoardState(updatedBoard);
-                addLog(`${currentPlayer.name.toUpperCase()} tomó ${destNode.name} sin resistencia.`, 'info');
-                setTimeout(() => resolvePostMovement(updatedBoard), 1000);
-              } else {
-                setBoardState(updatedBoard);
-                initCombat(bestMove.originId, bestMove.targetId, moveTroops);
-                // auto-resolve handled by the dedicated useEffect below
-              }
+              // resolveMoveTo handles empty/friendly/conquest/combat/siege/surprise
+              resolveMoveTo(bestMove.originId, bestMove.targetId, moveTroops);
             }
           }, 1000);
         } else {
@@ -1093,24 +1264,33 @@ export function useGameState(online = null) {
 
     return () => clearTimeout(botTimer);
   }, [
-    phase, 
-    currentTurn, 
-    players, 
-    boardState, 
-    diceRoll, 
-    graph, 
-    combatState, 
-    conquestState, 
-    reinforceNode, 
-    recruitmentTroops, 
-    rollMovement, 
+    phase,
+    currentTurn,
+    players,
+    boardState,
+    diceRoll,
+    graph,
+    combatState,
+    conquestState,
+    reinforceNode,
+    recruitmentTroops,
+    rollMovement,
     initConquest,
     executeConquestRoll,
     initCombat,
     executeCombatRound,
     resolvePostMovement,
     addLog,
-    surpriseState
+    surpriseState,
+    siegeState,
+    negotiationState,
+    botAuthority,
+    shieldPurchasedThisTurn,
+    placeShield,
+    getTotalTroops,
+    findCrossingConflict,
+    initNegotiation,
+    resolveMoveTo,
   ]);
 
   // --- BOT AUTO-RESOLVE: Combat ---
@@ -1151,6 +1331,32 @@ export function useGameState(online = null) {
     return () => clearTimeout(timer);
   }, [surpriseState, executeSurpriseDraw, players, currentTurn, botAuthority]);
 
+  // --- BOT AUTO-RESOLVE: Siege roll (attacker is a bot) ---
+  useEffect(() => {
+    if (!siegeState) return;
+    if (!botAuthority) return; // online: only the host drives bots
+    const attacker = players[currentTurn];
+    if (!attacker?.isBot) return;
+
+    const timer = setTimeout(() => executeSiegeRoll(), 900);
+    return () => clearTimeout(timer);
+  }, [siegeState, executeSiegeRoll, players, currentTurn, botAuthority]);
+
+  // --- BOT DEFENDER: decide a road negotiation on the host, with criterio ---
+  // Blocks if it has at least as many troops at the conflict cell as the crosser.
+  useEffect(() => {
+    if (!negotiationState || negotiationState.response) return;
+    if (!botAuthority) return; // only the host answers for bots
+    const defender = players.find(p => p.faction === negotiationState.defenderFaction);
+    if (!defender?.isBot) return;
+
+    const timer = setTimeout(() => {
+      const defTroops = boardState[negotiationState.conflictId]?.troops || 0;
+      respondNegotiation(defTroops >= negotiationState.troops ? 'block' : 'pass');
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [negotiationState, botAuthority, players, boardState, respondNegotiation]);
+
   // --- Highlight owned bases during RECRUIT for human player ---
   useEffect(() => {
     if (phase !== 'RECRUIT') return;
@@ -1170,10 +1376,10 @@ export function useGameState(online = null) {
   const getSnapshot = useCallback(() => ({
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
-    surpriseState, alliances, nucleoData,
+    surpriseState, siegeState, negotiationState, alliances, nucleoData,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
-       surpriseState, alliances, nucleoData]);
+       surpriseState, siegeState, negotiationState, alliances, nucleoData]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1189,6 +1395,8 @@ export function useGameState(online = null) {
     if (snap.combatState !== undefined) setCombatState(snap.combatState);
     if (snap.conquestState !== undefined) setConquestState(snap.conquestState);
     if (snap.surpriseState !== undefined) setSurpriseState(snap.surpriseState);
+    if (snap.siegeState !== undefined) setSiegeState(snap.siegeState);
+    if (snap.negotiationState !== undefined) setNegotiationState(snap.negotiationState);
     if (snap.alliances !== undefined) setAlliances(snap.alliances);
     if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
     // Incoming state means someone else acted — clear our local selection.
@@ -1212,16 +1420,25 @@ export function useGameState(online = null) {
     combatState,
     conquestState,
     surpriseState,
+    siegeState,
+    negotiationState,
+    shieldPurchasedThisTurn,
     alliances,
     nucleoData,
     startGame,
     rollMovement,
     handleNodeClick,
     reinforceNode,
+    placeShield,
+    skipFortify,
+    getTotalTroops,
     endTurn,
     executeConquestRoll,
     executeCombatRound,
     executeSurpriseDraw,
+    executeSiegeRoll,
+    respondNegotiation,
+    resolveNegotiation,
     retreatCombat,
     retreatDefender,
     proposeAlliance,

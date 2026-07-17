@@ -8,6 +8,9 @@ import GameControls from './components/GameControls';
 import CombatModal from './components/CombatModal';
 import ConquestModal from './components/ConquestModal';
 import SurpriseModal from './components/SurpriseModal';
+import SiegeModal from './components/SiegeModal';
+import NegotiationModal from './components/NegotiationModal';
+import FortifyModal from './components/FortifyModal';
 import Lobby from './components/Lobby';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
@@ -47,14 +50,23 @@ export default function App() {
     combatState,
     conquestState,
     surpriseState,
+    siegeState,
+    negotiationState,
+    shieldPurchasedThisTurn,
     startGame,
     rollMovement,
     handleNodeClick,
     reinforceNode,
+    placeShield,
+    skipFortify,
+    getTotalTroops,
     endTurn,
     executeConquestRoll,
     executeCombatRound,
     executeSurpriseDraw,
+    executeSiegeRoll,
+    respondNegotiation,
+    resolveNegotiation,
     retreatCombat,
     retreatDefender,
     proposeAlliance,
@@ -81,6 +93,33 @@ export default function App() {
     : (myFactions.includes(activeFaction) || (iAmHost && players[currentTurn]?.isBot));
 
   const lastSyncedRef = React.useRef(null);
+
+  // ── Road-crossing negotiation (defender modal / attacker resolution) ──
+  const negDefender = negotiationState
+    ? players.find((p) => p.faction === negotiationState.defenderFaction)
+    : null;
+  // Show the decision modal to a HUMAN defender: online → only if it's my seat;
+  // local → any human defender on this device.
+  const showNegotiationModal = Boolean(
+    negotiationState && !negotiationState.response && negDefender && !negDefender.isBot &&
+    (onlineActive ? myFactions.includes(negotiationState.defenderFaction) : true)
+  );
+  // The attacker (and spectators) wait while a negotiation is pending.
+  const negotiationWaiting = Boolean(negotiationState && !showNegotiationModal);
+
+  // Resolve the negotiation on the attacker-authoritative client: when the
+  // defender has answered, or (online only) when the countdown expires → block.
+  useEffect(() => {
+    if (!negotiationState) return;
+    if (onlineActive && !authoritative) return; // only the attacker side resolves online
+    if (negotiationState.response) { resolveNegotiation(); return; }
+    if (negotiationState.deadline) {
+      const ms = negotiationState.deadline - Date.now();
+      if (ms <= 0) { resolveNegotiation(); return; }
+      const t = setTimeout(() => resolveNegotiation(), ms + 150);
+      return () => clearTimeout(t);
+    }
+  }, [negotiationState, authoritative, onlineActive, resolveNegotiation]);
 
   // Setup lobby state
   const [playerCount, setPlayerCount] = useState(5);
@@ -650,7 +689,10 @@ export default function App() {
               phase={phase}
               selectedNode={selectedNode}
               highlightedNodes={highlightedNodes}
-              onNodeClick={(nodeId) => { if (!isMyTurn) return; handleNodeClick(nodeId, troopsToMove); }}
+              onNodeClick={(nodeId) => {
+                if (!isMyTurn) return;
+                handleNodeClick(nodeId, troopsToMove);
+              }}
               players={players}
             />
           </div>
@@ -661,7 +703,7 @@ export default function App() {
       </main>
 
       {/* Floating game controls — only for the player whose turn it is */}
-      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && isMyTurn && (
+      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && isMyTurn && (
         <GameControls
           phase={phase}
           currentTurn={currentTurn}
@@ -679,6 +721,18 @@ export default function App() {
           maxMovable={maxMovable}
           isBase={isBase}
           boardState={boardState}
+        />
+      )}
+
+      {/* FORTIFY step: buy a shield after reinforcing, before rolling (own turn only) */}
+      {gameStarted && phase === 'FORTIFY' && isMyTurn && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && (
+        <FortifyModal
+          boardState={boardState}
+          graph={graph}
+          players={players}
+          currentTurn={currentTurn}
+          onFortify={guardAuth(placeShield)}
+          onSkip={guardAuth(skipFortify)}
         />
       )}
 
@@ -706,6 +760,31 @@ export default function App() {
         currentTurn={currentTurn}
         graph={graph}
       />
+
+      <SiegeModal
+        siegeState={siegeState}
+        onRoll={guardAuth(executeSiegeRoll)}
+        players={players}
+        currentTurn={currentTurn}
+        graph={graph}
+      />
+
+      {/* Negotiation: modal for the (human) defender; waiting overlay for everyone else */}
+      {showNegotiationModal && (
+        <NegotiationModal
+          negotiationState={negotiationState}
+          onRespond={respondNegotiation}
+          players={players}
+          graph={graph}
+        />
+      )}
+      {negotiationWaiting && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div className="animate-fade-in" style={{ pointerEvents: 'all', background: '#0f121d', border: '1px solid rgba(0,240,255,0.3)', borderRadius: 8, padding: '16px 22px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
+            <p className="font-mono text-[12px] text-cyan-400 animate-pulse text-center">⏳ Esperando respuesta del enemigo…</p>
+          </div>
+        </div>
+      )}
 
       {/* Floating Roster Panel */}
       {showRoster && (

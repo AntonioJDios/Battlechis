@@ -124,6 +124,16 @@ export default function Board({
     );
   };
 
+  // Helper to render shield pips (fortification) above a base
+  const renderShields = (shields, y) => {
+    if (!shields || shields <= 0) return null;
+    return (
+      <text y={y} textAnchor="middle" fontSize="12" style={{ pointerEvents: 'none' }}>
+        {'🛡️'.repeat(Math.min(3, shields))}
+      </text>
+    );
+  };
+
   const getFactionColor = (factionId) => {
     if (factionId === null || factionId === undefined) return 'var(--neon-grey)';
     return FACTIONS[factionId]?.neon || 'var(--neon-grey)';
@@ -279,6 +289,7 @@ export default function Board({
                   >
                     {state.troops} T
                   </text>
+                  {renderShields(state.shields, -30)}
                   {isHighlighted && (
                     <circle r="52" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" strokeDasharray="5,5" className="animate-spin" style={{ animationDuration: '10s' }} />
                   )}
@@ -342,6 +353,8 @@ export default function Board({
                     </text>
                   </g>
 
+                  {renderShields(state.shields, -34)}
+
                   {/* Action Highlights */}
                   {isHighlighted && (
                     <circle r="44" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="4,4" className="animate-pulse" />
@@ -394,6 +407,8 @@ export default function Board({
                       <text y="2" textAnchor="middle" fill="#fff" fontSize="6" fontWeight="bold">S</text>
                     </g>
                   )}
+
+                  {renderShields(state.shields, -26)}
 
                   {isHighlighted && (
                     <circle r="32" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="3,3" className="animate-pulse" />
