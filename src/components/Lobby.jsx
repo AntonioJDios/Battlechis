@@ -38,14 +38,27 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
     }
   };
 
-  // Step 1: look up the game so the player can pick which commander they are.
+  // Step 1: look up the game. Waiting → pick a seat. Already started → if you're
+  // a member (same browser/device), reconnect; otherwise you can't join.
   const doFind = async () => {
     if (!code.trim()) { setLocalError('Escribe el código de la partida.'); return; }
     setBusy(true); setLocalError(null);
     try {
       const row = await mp.findGame(code);
-      setFoundGame(row);
-      setView('pickSeat');
+      if (row.status === 'waiting') {
+        setFoundGame(row);
+        setView('pickSeat');
+        return;
+      }
+      // Game in progress (or finished): reconnect only if this device is a member.
+      const isMember = (row.member_ids || []).includes(mp.userId)
+        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+      if (isMember) {
+        setView('reconnecting');
+        mp.reconnect(row); // the app switches to the game once state hydrates
+      } else {
+        setLocalError('Esa partida ya ha empezado y no formas parte de ella (o entras desde otro dispositivo).');
+      }
     } catch (e) {
       setLocalError(e.message);
     } finally {
@@ -226,9 +239,24 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
             className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-3 text-sm font-bold mt-1 flex items-center justify-center gap-2"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-            {busy ? 'Buscando…' : 'Buscar partida'}
+            {busy ? 'Buscando…' : 'Entrar / Reconectar'}
           </button>
+          <p className="font-mono text-[9px] text-gray-600 text-center">
+            Si la partida ya empezó, con este mismo código vuelves a tu comandante (desde el mismo navegador/dispositivo).
+          </p>
           {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
+        </div>
+      </Shell>
+    );
+  }
+
+  // ── Reconnecting to a game in progress ──
+  if (view === 'reconnecting') {
+    return (
+      <Shell onBack={onBack} title="Reconectando">
+        <div className="flex flex-col items-center gap-3 py-4">
+          <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+          <p className="font-mono text-[11px] text-cyan-400 text-center">Recuperando tu partida…</p>
         </div>
       </Shell>
     );

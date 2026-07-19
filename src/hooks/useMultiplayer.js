@@ -121,6 +121,8 @@ export function useMultiplayer() {
   }, [ensureAuth, subscribe]);
 
   // ── Look up a game by code (no changes yet — used to show its seats) ──
+  // Look up a game by code. Returns the row for ANY status (the caller decides:
+  // 'waiting' → pick a seat; 'playing' + you're a member → reconnect).
   const findGame = useCallback(async (code) => {
     setConnecting(true);
     setError(null);
@@ -134,9 +136,7 @@ export function useMultiplayer() {
         .limit(1);
       if (selErr) throw selErr;
       if (!rows || rows.length === 0) throw new Error('No existe una partida con ese código.');
-      const row = rows[0];
-      if (row.status !== 'waiting') throw new Error('Esa partida ya ha empezado.');
-      return row;
+      return rows[0];
     } catch (e) {
       setError(e.message);
       throw e;
@@ -144,6 +144,13 @@ export function useMultiplayer() {
       setConnecting(false);
     }
   }, [ensureAuth]);
+
+  // ── Reconnect to a game already in progress (you must be a member) ──
+  const reconnect = useCallback((row) => {
+    setGame(row);
+    subscribe(row.id);
+    applyRow(row); // hydrate the current state immediately
+  }, [subscribe, applyRow]);
 
   // ── Claim a specific seat in a game (the player picks which commander) ──
   const claimSeat = useCallback(async (gameId, seatIndex, playerName) => {
@@ -225,6 +232,7 @@ export function useMultiplayer() {
     createGame,
     findGame,
     claimSeat,
+    reconnect,
     refreshGame,
     pushState,
     setOnRemoteState,
