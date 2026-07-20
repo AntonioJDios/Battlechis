@@ -11,6 +11,7 @@ import SurpriseModal from './components/SurpriseModal';
 import SiegeModal from './components/SiegeModal';
 import NegotiationModal from './components/NegotiationModal';
 import FortifyModal from './components/FortifyModal';
+import BombModal from './components/BombModal';
 import Lobby from './components/Lobby';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
@@ -52,7 +53,9 @@ export default function App() {
     surpriseState,
     siegeState,
     negotiationState,
+    bombState,
     shieldPurchasedThisTurn,
+    brutalCards,
     startGame,
     rollMovement,
     handleNodeClick,
@@ -65,6 +68,7 @@ export default function App() {
     executeCombatRound,
     executeSurpriseDraw,
     executeSiegeRoll,
+    executeBomb,
     respondNegotiation,
     resolveNegotiation,
     retreatCombat,
@@ -135,6 +139,9 @@ export default function App() {
   const [showRoster, setShowRoster] = useState(false);
   const [troopsToMove, setTroopsToMove] = useState(1);
   const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
+  // Game options chosen by the creator
+  const [boardSizeOpt, setBoardSizeOpt] = useState('large'); // 'large' | 'small'
+  const [brutalOpt, setBrutalOpt] = useState(false); // brutal cards (bomb + instant núcleo win)
 
   // ── PWA install ──
   const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
@@ -194,7 +201,7 @@ export default function App() {
     }));
     setShowLobby(false);
     setOnlineActive(true);
-    startGame(launchPlayers);
+    startGame(launchPlayers, { boardSize: boardSizeOpt, brutalCards: brutalOpt });
   };
 
   // ── ONLINE: receive remote state (other player acted) and hydrate ──
@@ -300,7 +307,7 @@ export default function App() {
       return;
     }
 
-    startGame(setupPlayers);
+    startGame(setupPlayers, { boardSize: boardSizeOpt, brutalCards: brutalOpt });
   };
 
   const toggleMute = () => {
@@ -474,6 +481,28 @@ export default function App() {
                           </span>
                         </button>
                       ))}
+                    </div>
+
+                    {/* Game options: board size + brutal cards */}
+                    <div className="flex flex-col gap-2 mb-2 border-t border-slate-800 pt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Tablero</span>
+                        {[['large', 'Grande'], ['small', 'Pequeño ⚡']].map(([val, lbl]) => (
+                          <button key={val} onClick={() => setBoardSizeOpt(val)}
+                            className={`flex-1 py-1.5 rounded font-tactical text-[10px] font-bold border transition-all ${
+                              boardSizeOpt === val ? 'border-cyan-400 text-cyan-400 bg-cyan-950/30' : 'border-slate-800 text-gray-500'
+                            }`}>{lbl}</button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Cartas</span>
+                        {[[false, 'Normales'], [true, 'Brutales 💣👑']].map(([val, lbl]) => (
+                          <button key={String(val)} onClick={() => setBrutalOpt(val)}
+                            className={`flex-1 py-1.5 rounded font-tactical text-[10px] font-bold border transition-all ${
+                              brutalOpt === val ? 'border-red-400 text-red-400 bg-red-950/30' : 'border-slate-800 text-gray-500'
+                            }`}>{lbl}</button>
+                        ))}
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -703,7 +732,7 @@ export default function App() {
       </main>
 
       {/* Floating game controls — only for the player whose turn it is */}
-      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && isMyTurn && (
+      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && !bombState && isMyTurn && (
         <GameControls
           phase={phase}
           currentTurn={currentTurn}
@@ -759,6 +788,16 @@ export default function App() {
         players={players}
         currentTurn={currentTurn}
         graph={graph}
+        brutalCards={brutalCards}
+      />
+
+      <BombModal
+        bombState={bombState}
+        boardState={boardState}
+        graph={graph}
+        players={players}
+        currentTurn={currentTurn}
+        onBomb={guardAuth(executeBomb)}
       />
 
       <SiegeModal

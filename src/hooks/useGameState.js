@@ -1,9 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateBoardGraph, getNodesAtDistance, findShortestPath, FACTIONS } from '../utils/boardGraph';
 import { SoundManager } from '../components/SoundManager';
 
 // Surprise card pool (Monopoly-style): troops gained/lost by the platoon landing on the cell
 export const SURPRISE_CARDS = [+5, +3, +2, +1, -1, -2, -3];
+
+// Build the surprise draw deck. In "brutal" mode we sprinkle in powerful cards:
+//   💣 bomb (wipe any base) and 👑 instant NÚCLEO victory (rare).
+export function buildSurpriseDeck(brutal) {
+  const deck = SURPRISE_CARDS.map((v) => ({ t: 'troops', v }));
+  if (brutal) {
+    deck.push({ t: 'bomb' }, { t: 'bomb' });   // 2 nukes
+    deck.push({ t: 'nucleo' });                 // 1 instant win (rare)
+  }
+  return deck;
+}
 
 export function useGameState(online = null) {
   // Online config (null = offline single-device play, unchanged behaviour):
@@ -13,7 +24,11 @@ export function useGameState(online = null) {
   const isOnline = online?.isOnline ?? false;
   const botAuthority = !isOnline || (online?.isHost ?? false); // may this device run bots?
 
-  const [graph] = useState(() => generateBoardGraph());
+  // Board size + brutal cards are chosen by the game creator; graph is derived
+  // from boardSize so every client rebuilds the same layout (deterministic ids).
+  const [boardSize, setBoardSize] = useState('large');
+  const [brutalCards, setBrutalCards] = useState(false);
+  const graph = useMemo(() => generateBoardGraph(boardSize), [boardSize]);
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(0); // Index in players array
   const [phase, setPhase] = useState('SETUP'); // SETUP, RECRUIT, MOVE, CONQUER, COMBAT, GAME_OVER
@@ -39,6 +54,7 @@ export function useGameState(online = null) {
   const [siegeState, setSiegeState] = useState(null); // {attackerNodeId, defenderNodeId, attackForce} — shield siege before combat
   const [negotiationState, setNegotiationState] = useState(null); // road-crossing negotiation
   const [pendingAdvance, setPendingAdvance] = useState(null); // {fromId, toId} — continue after winning a block
+  const [bombState, setBombState] = useState(null); // {nodeId} — surprise NUKE: pick a base to wipe
 
   // Shields: max 1 purchase per turn
   const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
@@ -49,8 +65,16 @@ export function useGameState(online = null) {
     setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 100));
   }, []);
 
-  // Initialize the game
-  const startGame = useCallback((selectedPlayers) => {
+  // Initialize the game.
+  // options: { boardSize: 'large'|'small', brutalCards: boolean }
+  const startGame = useCallback((selectedPlayers, options = {}) => {
+    const size = options.boardSize || 'large';
+    const brutal = !!options.brutalCards;
+    setBoardSize(size);
+    setBrutalCards(brutal);
+    // Build from a freshly-generated graph of the chosen size (state update is async).
+    const g = generateBoardGraph(size);
+
     // selectedPlayers: array of { faction: 0..4, isBot: boolean, name: string }
     const gamePlayers = selectedPlayers.map((p, idx) => ({
       id: idx,
@@ -66,8 +90,8 @@ export function useGameState(online = null) {
 
     // Initialize board state
     const initialBoard = {};
-    Object.keys(graph).forEach(nodeId => {
-      const node = graph[nodeId];
+    Object.keys(g).forEach(nodeId => {
+      const node = g[nodeId];
       if (node.type === 'hq') {
         const owner = gamePlayers.find(p => p.faction === node.faction);
         if (owner) {
@@ -106,17 +130,17 @@ export function useGameState(online = null) {
 
     const firstPlayer = gamePlayers[0];
     const firstBases = Object.keys(initialBoard).filter(id => {
-      const n = graph[id]; const s = initialBoard[id];
+      const n = g[id]; const s = initialBoard[id];
       return s?.occupyingFaction === firstPlayer.faction && (n.type === 'hq' || n.type === 'neutral' || n.type === 'center');
     }).length;
     const initialRecruits = Math.max(1, firstBases * 3);
     setRecruitmentTroops(initialRecruits);
 
     setLogs([]);
-    addLog(`SISTEMA INICIADO: Modo ${gamePlayers.length} Comandantes.`, 'success');
+    addLog(`SISTEMA INICIADO: Modo ${gamePlayers.length} Comandantes · Tablero ${size === 'small' ? 'PEQUEÑO' : 'GRANDE'}${brutal ? ' · Cartas brutales 💣' : ''}.`, 'success');
     addLog(`TURNO DE: ${firstPlayer.name.toUpperCase()} (+${initialRecruits} Refuerzos).`, 'info');
     SoundManager.playConquest();
-  }, [graph, addLog]);
+  }, [addLog]);
 
   // Capture bonus by node type
   const captureBonus = useCallback((nodeType) => {
@@ -890,34 +914,70 @@ export function useGameState(online = null) {
     }
   }, [phase, currentTurn, players, boardState, diceRoll, selectedNode, highlightedNodes, graph, reinforceNode, addLog, recruitmentTroops, areAllied, findCrossingConflict, initNegotiation, resolveMoveTo, initConquest]);
 
-  // --- SURPRISE CELL: draw a card, apply troops delta immediately, then continue turn ---
-  const executeSurpriseDraw = useCallback((cardValue = null) => {
+  // --- SURPRISE CELL: draw a card. Troops → apply delta; 💣 bomb → pick a base to
+  //     wipe; 👑 nucleo → instant victory. Then continue the turn. ---
+  const executeSurpriseDraw = useCallback((card = null) => {
     if (!surpriseState) return;
-    const card = cardValue !== null ? cardValue : SURPRISE_CARDS[Math.floor(Math.random() * SURPRISE_CARDS.length)];
+    const drawn = card || (() => { const d = buildSurpriseDeck(brutalCards); return d[Math.floor(Math.random() * d.length)]; })();
     const { nodeId } = surpriseState;
-    const state = boardState[nodeId];
     const currentPlayer = players[currentTurn];
     const nodeName = graph[nodeId]?.name ?? 'casilla sorpresa';
-    const newBoard = { ...boardState };
-    const newTroops = (state?.troops ?? 0) + card;
 
+    // 👑 Instant NÚCLEO victory
+    if (drawn.t === 'nucleo') {
+      setSurpriseState(null);
+      addLog(`👑 ¡CARTA DEL NÚCLEO! ${currentPlayer?.name.toUpperCase()} reclama el control estratégico y GANA la partida.`, 'success');
+      SoundManager.playConquest();
+      setPhase('GAME_OVER');
+      return;
+    }
+
+    // 💣 Atomic bomb: the drawer must pick a base to wipe.
+    if (drawn.t === 'bomb') {
+      setSurpriseState(null);
+      setPhase('BOMB');
+      setBombState({ fromNodeId: nodeId });
+      addLog(`💣 ¡BOMBA ATÓMICA para ${currentPlayer?.name.toUpperCase()}! Elige una base para arrasar.`, 'error');
+      return;
+    }
+
+    // Troop card (default)
+    const v = drawn.v;
+    const state = boardState[nodeId];
+    const newBoard = { ...boardState };
+    const newTroops = (state?.troops ?? 0) + v;
     if (newTroops <= 0) {
-      newBoard[nodeId] = { occupyingFaction: null, troops: 0, isSieged: false };
-      addLog(`🃏 SORPRESA (${card}): ¡El pelotón de ${currentPlayer?.name.toUpperCase()} fue aniquilado en ${nodeName}!`, 'error');
+      newBoard[nodeId] = { occupyingFaction: null, troops: 0, isSieged: false, shields: 0 };
+      addLog(`🃏 SORPRESA (${v}): ¡El pelotón de ${currentPlayer?.name.toUpperCase()} fue aniquilado en ${nodeName}!`, 'error');
     } else {
       newBoard[nodeId] = { ...state, troops: newTroops };
-      if (card > 0) {
-        addLog(`🃏 SORPRESA (+${card}): ¡Refuerzos inesperados para ${currentPlayer?.name.toUpperCase()} en ${nodeName}!`, 'success');
-      } else {
-        addLog(`🃏 SORPRESA (${card}): Emboscada — ${currentPlayer?.name.toUpperCase()} pierde tropas en ${nodeName}.`, 'error');
-      }
+      if (v > 0) addLog(`🃏 SORPRESA (+${v}): ¡Refuerzos inesperados para ${currentPlayer?.name.toUpperCase()} en ${nodeName}!`, 'success');
+      else addLog(`🃏 SORPRESA (${v}): Emboscada — ${currentPlayer?.name.toUpperCase()} pierde tropas en ${nodeName}.`, 'error');
     }
 
     setBoardState(newBoard);
     setSurpriseState(null);
     setPhase('MOVE');
     resolvePostMovement(newBoard);
-  }, [surpriseState, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
+  }, [surpriseState, brutalCards, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
+
+  // --- ATOMIC BOMB: wipe the chosen base (any base on the board) then continue. ---
+  const executeBomb = useCallback((targetNodeId) => {
+    if (!bombState) return;
+    const currentPlayer = players[currentTurn];
+    const node = graph[targetNodeId];
+    const isBase = node && (node.type === 'hq' || node.type === 'neutral' || node.type === 'center');
+    if (!isBase) { addLog("La bomba solo puede caer sobre una base (HQ, neutral o núcleo).", "error"); return; }
+
+    const newBoard = { ...boardState, [targetNodeId]: { occupyingFaction: null, troops: 0, isSieged: false, shields: 0 } };
+    setBoardState(newBoard);
+    setBombState(null);
+    addLog(`💥 BOMBA ATÓMICA: ${currentPlayer?.name.toUpperCase()} arrasó ${node.name}. ¡Tropas y escudos destruidos!`, 'error');
+    SoundManager.playExplosion?.();
+    // A wipe can eliminate a player / trigger victory checks via resolvePostMovement.
+    setPhase('MOVE');
+    resolvePostMovement(newBoard);
+  }, [bombState, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
 
   // --- RESOLVE NEUTRAL BASE CONQUEST (5-6 captures, 1-4 sieges) ---
   const executeConquestRoll = useCallback((rollValue = null) => {
@@ -1117,7 +1177,7 @@ export function useGameState(online = null) {
 
   // --- BOT AI ROTATION TIMER/EFFECT ---
   useEffect(() => {
-    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState || pendingAdvance) return;
+    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState || pendingAdvance || bombState) return;
     if (!botAuthority) return; // online: only the host drives bots
 
     const currentPlayer = players[currentTurn];
@@ -1299,6 +1359,7 @@ export function useGameState(online = null) {
     siegeState,
     negotiationState,
     pendingAdvance,
+    bombState,
     botAuthority,
     shieldPurchasedThisTurn,
     placeShield,
@@ -1345,6 +1406,27 @@ export function useGameState(online = null) {
     const timer = setTimeout(() => executeSurpriseDraw(), 1200);
     return () => clearTimeout(timer);
   }, [surpriseState, executeSurpriseDraw, players, currentTurn, botAuthority]);
+
+  // --- BOT AUTO-RESOLVE: Atomic bomb (drop on the strongest ENEMY base) ---
+  useEffect(() => {
+    if (!bombState) return;
+    if (!botAuthority) return; // online: only the host drives bots
+    const currentPlayer = players[currentTurn];
+    if (!currentPlayer?.isBot) return;
+
+    const timer = setTimeout(() => {
+      const enemyBases = Object.keys(boardState).filter((id) => {
+        const n = graph[id]; const s = boardState[id];
+        return s?.occupyingFaction != null && s.occupyingFaction !== currentPlayer.faction
+          && (n.type === 'hq' || n.type === 'neutral' || n.type === 'center');
+      });
+      // Strongest enemy base (most troops + shields weight)
+      enemyBases.sort((a, b) => (boardState[b].troops + (boardState[b].shields || 0) * 3) - (boardState[a].troops + (boardState[a].shields || 0) * 3));
+      if (enemyBases.length > 0) executeBomb(enemyBases[0]);
+      else { setBombState(null); setPhase('MOVE'); resolvePostMovement(boardState); }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [bombState, botAuthority, players, currentTurn, boardState, graph, executeBomb, resolvePostMovement]);
 
   // --- BOT AUTO-RESOLVE: Siege roll (attacker is a bot) ---
   useEffect(() => {
@@ -1405,10 +1487,12 @@ export function useGameState(online = null) {
   const getSnapshot = useCallback(() => ({
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
-    surpriseState, siegeState, negotiationState, alliances, nucleoData,
+    surpriseState, siegeState, negotiationState, bombState, alliances, nucleoData,
+    boardSize, brutalCards,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
-       surpriseState, siegeState, negotiationState, alliances, nucleoData]);
+       surpriseState, siegeState, negotiationState, bombState, alliances, nucleoData,
+       boardSize, brutalCards]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1426,8 +1510,12 @@ export function useGameState(online = null) {
     if (snap.surpriseState !== undefined) setSurpriseState(snap.surpriseState);
     if (snap.siegeState !== undefined) setSiegeState(snap.siegeState);
     if (snap.negotiationState !== undefined) setNegotiationState(snap.negotiationState);
+    if (snap.bombState !== undefined) setBombState(snap.bombState);
     if (snap.alliances !== undefined) setAlliances(snap.alliances);
     if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
+    // Board layout config must match so every client rebuilds the same graph.
+    if (snap.boardSize !== undefined) setBoardSize(snap.boardSize);
+    if (snap.brutalCards !== undefined) setBrutalCards(snap.brutalCards);
     // Incoming state means someone else acted — clear our local selection.
     setSelectedNode(null);
     setHighlightedNodes([]);
@@ -1451,7 +1539,10 @@ export function useGameState(online = null) {
     surpriseState,
     siegeState,
     negotiationState,
+    bombState,
     shieldPurchasedThisTurn,
+    brutalCards,
+    boardSize,
     alliances,
     nucleoData,
     startGame,
@@ -1466,6 +1557,7 @@ export function useGameState(online = null) {
     executeCombatRound,
     executeSurpriseDraw,
     executeSiegeRoll,
+    executeBomb,
     respondNegotiation,
     resolveNegotiation,
     retreatCombat,

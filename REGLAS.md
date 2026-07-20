@@ -41,7 +41,9 @@ Ser el último comandante en pie o dominar el sector. Ganas la partida si logras
 | De una base neutral al NÚCLEO | **3** |
 | De un HQ al NÚCLEO (mínimo) | **10** |
 
-> Las distancias entre bases grandes son deliberadamente largas: **no puedes llegar de un HQ a otro (ni a una base intermedia) con una sola tirada de dado.**
+> Distancias del **tablero Grande**. En el **tablero Pequeño ⚡** son mucho más cortas (HQ↔HQ 4, HQ↔base 3, base↔núcleo 2) para partidas rápidas.
+
+> En tablero Grande las distancias son deliberadamente largas: **no puedes llegar de un HQ a otro con una sola tirada de dado.**
 
 ---
 
@@ -50,6 +52,17 @@ Ser el último comandante en pie o dominar el sector. Ganas la partida si logras
 1. Cada jugador elige una facción y ocupa su **HQ** con **5 tropas** de inicio.
 2. Las bases neutrales y el NÚCLEO empiezan **vacíos**.
 3. Empieza el primer jugador. Se juega por turnos en orden.
+
+## ⚙️ Modos de partida (los elige quien crea la partida)
+
+Dos ajustes independientes que combinan 4 tipos de partida:
+
+- **Tablero:**
+  - **Grande** (normal): distancias largas (HQ↔HQ 8 pasos). Partidas más largas y estratégicas.
+  - **Pequeño ⚡** (relámpago): distancias cortas (HQ↔HQ 4, HQ↔base 3, base↔núcleo 2). **Chocáis enseguida → partida rápida.**
+- **Cartas:**
+  - **Normales:** solo cartas de tropas en las casillas sorpresa.
+  - **Brutales 💣👑:** el mazo incluye además cartas demoledoras (bomba atómica y victoria directa del núcleo). Ver [Casillas Sorpresa](#-casillas-sorpresa).
 
 ---
 
@@ -171,10 +184,14 @@ Al tomar una posición (por conquista o ganando un combate) recibes tropas de re
 
 ## 🃏 Casillas Sorpresa
 
-Hay **5 casillas sorpresa** repartidas por el anillo exterior. Cuando tu pelotón **cae** en una, roba **una carta** que se aplica al instante a ese pelotón:
+Hay **casillas sorpresa** repartidas por el anillo exterior. Cuando tu pelotón **cae** en una, roba **una carta**:
 
-- Cartas posibles: **+5, +3, +2, +1, −1, −2, −3** tropas.
-- Si una carta negativa deja al pelotón en **0 o menos**, el pelotón es **aniquilado** y la casilla queda libre.
+- **Cartas de tropas** (siempre): **+5, +3, +2, +1, −1, −2, −3** tropas al pelotón. Si una negativa lo deja en **0 o menos**, el pelotón es **aniquilado** y la casilla queda libre.
+
+Si la partida se creó con **cartas brutales**, el mazo incluye además (raras):
+
+- **💣 Bomba atómica:** eliges **cualquier base del tablero** y la **arrasas** — mueren todas sus tropas y escudos, y queda vacía (¡puedes borrar un HQ enemigo entero!).
+- **👑 Victoria del núcleo:** ¡**ganas la partida al instante**! Como si controlaras el NÚCLEO.
 
 ---
 
@@ -221,7 +238,9 @@ La partida termina en cuanto un comandante cumple **cualquiera** de estas:
 | Conquista base vacía | 1 = falla · 2-6 = conquista |
 | Combate | Dado más alto gana; empate = defensor |
 | Bono de captura | HQ +10 · neutral +5 |
-| Cartas sorpresa | +5, +3, +2, +1, −1, −2, −3 |
+| Cartas sorpresa (tropas) | +5, +3, +2, +1, −1, −2, −3 |
+| Modos de tablero | Grande (largo) / Pequeño ⚡ (rápido) |
+| Cartas brutales (opcional) | 💣 arrasa cualquier base · 👑 victoria directa |
 | Fortificar (fase tras reforzar) | 5 tropas de la base → 1 escudo (≥10 tropas totales, base con ≥6; máx. 1/turno, 3/base) |
 | Asedio (base con escudos) | dado 1→−1 · 2-3→−2 · 4-6→−3; si queda alguno, repelido |
 | Bloqueo al cruzar | el ocupante deja pasar o bloquea (combate); online 15 s → bloquear |

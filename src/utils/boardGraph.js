@@ -21,7 +21,15 @@ export const NEUTRAL_BASE_NAMES = [
   "BASE ALPHA-5"
 ];
 
-export function generateBoardGraph() {
+// Board sizes: number of intermediate path cells on each kind of route.
+// 'large' = original long board; 'small' = quick board (contact happens fast).
+const BOARD_SIZES = {
+  large: { outer: 7, radialHqN: 6, radialNCenter: 2 }, // HQ↔HQ 8, HQ↔base 7, base↔centro 3
+  small: { outer: 3, radialHqN: 2, radialNCenter: 1 }, // HQ↔HQ 4, HQ↔base 3, base↔centro 2
+};
+
+export function generateBoardGraph(size = 'large') {
+  const cfg = BOARD_SIZES[size] || BOARD_SIZES.large;
   const graph = {};
 
   const width = 800;
@@ -88,16 +96,19 @@ export function generateBoardGraph() {
     });
   }
 
-  // 4. Add Outer Paths & Connect HQs
-  // 7 intermediate nodes between HQs (odd) → distance 8; the middle one (j=4) is a SURPRISE cell
+  // 4. Add Outer Paths & Connect HQs.
+  // `cfg.outer` intermediate cells → distance outer+1 between HQs.
+  // The middle cell is a SURPRISE cell.
+  const outerN = cfg.outer;
+  const outerMid = Math.ceil(outerN / 2);
   for (let i = 0; i < 5; i++) {
     const nextHq = (i + 1) % 5;
     const startAngle = getHqAngle(i);
     let lastNodeId = `hq_${i}`;
 
-    for (let j = 1; j <= 7; j++) {
-      const angle = startAngle + (j * RAD_72 / 8); // 72 deg / 8 segments
-      const isSurprise = j === 4;
+    for (let j = 1; j <= outerN; j++) {
+      const angle = startAngle + (j * RAD_72 / (outerN + 1));
+      const isSurprise = j === outerMid;
       const nodeId = `outer_${i}_${j}`;
       addNode(nodeId, {
         type: isSurprise ? "surprise" : "path",
@@ -111,8 +122,8 @@ export function generateBoardGraph() {
     connect(lastNodeId, `hq_${nextHq}`);
   }
 
-  // 5. Add Radial Paths between HQs and Neutral Bases
-  // 6 intermediate nodes per path → distance 7 (unreachable in a single dice roll)
+  // 5. Add Radial Paths between HQs and Neutral Bases (`cfg.radialHqN` intermediate cells).
+  const radN = cfg.radialHqN;
   for (let i = 0; i < 5; i++) {
     const nIdx1 = i;
     const nIdx2 = (i - 1 + 5) % 5;
@@ -121,30 +132,28 @@ export function generateBoardGraph() {
     const n1 = graph[`neutral_${nIdx1}`];
     const n2 = graph[`neutral_${nIdx2}`];
 
-    // Path to n1 (6 intermediate nodes → 7 steps)
     let lastNodeId = `hq_${i}`;
-    for (let j = 1; j <= 6; j++) {
+    for (let j = 1; j <= radN; j++) {
       const nodeId = `radial_hq_n1_${i}_${j}`;
       addNode(nodeId, {
         type: "path",
         name: `Sector Radial ${i}-A${j}`,
-        x: hq.x + (n1.x - hq.x) * (j / 7),
-        y: hq.y + (n1.y - hq.y) * (j / 7)
+        x: hq.x + (n1.x - hq.x) * (j / (radN + 1)),
+        y: hq.y + (n1.y - hq.y) * (j / (radN + 1))
       });
       connect(lastNodeId, nodeId);
       lastNodeId = nodeId;
     }
     connect(lastNodeId, `neutral_${nIdx1}`);
 
-    // Path to n2 (6 intermediate nodes → 7 steps)
     lastNodeId = `hq_${i}`;
-    for (let j = 1; j <= 6; j++) {
+    for (let j = 1; j <= radN; j++) {
       const nodeId = `radial_hq_n2_${i}_${j}`;
       addNode(nodeId, {
         type: "path",
         name: `Sector Radial ${i}-B${j}`,
-        x: hq.x + (n2.x - hq.x) * (j / 7),
-        y: hq.y + (n2.y - hq.y) * (j / 7)
+        x: hq.x + (n2.x - hq.x) * (j / (radN + 1)),
+        y: hq.y + (n2.y - hq.y) * (j / (radN + 1))
       });
       connect(lastNodeId, nodeId);
       lastNodeId = nodeId;
@@ -152,18 +161,19 @@ export function generateBoardGraph() {
     connect(lastNodeId, `neutral_${nIdx2}`);
   }
 
-  // 6. Add Radial Paths between Neutral Bases and Center Core
+  // 6. Add Radial Paths between Neutral Bases and Center Core (`cfg.radialNCenter`).
+  const ncN = cfg.radialNCenter;
   for (let i = 0; i < 5; i++) {
     const neutral = graph[`neutral_${i}`];
     let lastNodeId = `neutral_${i}`;
 
-    for (let j = 1; j <= 2; j++) {
+    for (let j = 1; j <= ncN; j++) {
       const nodeId = `radial_n_center_${i}_${j}`;
       addNode(nodeId, {
         type: "path",
         name: `Acceso Núcleo ${i}-${j}`,
-        x: neutral.x + (cx - neutral.x) * (j / 3),
-        y: neutral.y + (cy - neutral.y) * (j / 3)
+        x: neutral.x + (cx - neutral.x) * (j / (ncN + 1)),
+        y: neutral.y + (cy - neutral.y) * (j / (ncN + 1))
       });
       connect(lastNodeId, nodeId);
       lastNodeId = nodeId;
