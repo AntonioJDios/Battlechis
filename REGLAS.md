@@ -188,11 +188,14 @@ Hay **casillas sorpresa** repartidas por el anillo exterior. Cuando tu pelotón 
 
 - **Cartas de tropas** (siempre): **+5, +3, +2, +1, −1, −2, −3** tropas al pelotón. Si una negativa lo deja en **0 o menos**, el pelotón es **aniquilado** y la casilla queda libre.
 
-Si la partida se creó con **cartas brutales**, el mazo incluye además (raras):
+Si la partida se creó con **cartas brutales**, además puedes robar cartas potentes que **van a tu mano secreta** (los demás **no ven** qué cartas tienes). Las **de ataque** las juegas **en tu turno**; la **de defensa** es **reactiva** (se usa cuando te atacan):
 
-- **💣 Bomba atómica:** eliges **cualquier base del tablero** y la **arrasas** — mueren todas sus tropas y escudos, y queda vacía (¡puedes borrar un HQ enemigo entero!).
-- **👑 Victoria del núcleo:** ¡**ganas la partida al instante**! Como si controlaras el NÚCLEO.
-- **🏁 Fin de partida:** la partida **termina en el acto** y gana **quien va líder**: el que controla **más bases** (a igualdad, más tropas).
+- **💣 Bomba atómica** (ataque): en tu turno, eliges **cualquier base del tablero** y la **arrasas** — mueren todas sus tropas y escudos, queda vacía (¡puedes borrar un HQ enemigo entero!). No consume tu movimiento.
+- **👑 Victoria del núcleo** (ataque): la juegas en tu turno y **ganas la partida al instante**.
+- **🏁 Fin de partida** (ataque): la juegas y la partida **termina en el acto**; gana **quien va líder** (más bases; a igualdad, más tropas).
+- **🛡️ Super defensa** (reactiva): cuando un rival ataca una de tus bases, te sale la opción de **usarla para parar el ataque** por completo (las tropas atacantes se repliegan). En online tienes 15 s para decidir.
+
+> Cada carta se gasta al usarla. Tu mano solo la ves tú (en online el estado viaja a todos, pero la interfaz no muestra las cartas ajenas).
 
 ---
 
@@ -241,7 +244,7 @@ La partida termina en cuanto un comandante cumple **cualquiera** de estas:
 | Bono de captura | HQ +10 · neutral +5 |
 | Cartas sorpresa (tropas) | +5, +3, +2, +1, −1, −2, −3 |
 | Modos de tablero | Grande (largo) / Pequeño ⚡ (rápido) |
-| Cartas brutales (opcional) | 💣 arrasa cualquier base · 👑 victoria directa · 🏁 fin de partida (gana el líder) |
+| Cartas brutales (opcional) | Van a tu **mano secreta**: 💣 bomba · 👑 victoria · 🏁 fin de partida (ataque, en tu turno) · 🛡️ super defensa (reactiva, para un ataque) |
 | Fortificar (fase tras reforzar) | 5 tropas de la base → 1 escudo (≥10 tropas totales, base con ≥6; máx. 1/turno, 3/base) |
 | Asedio (base con escudos) | dado 1→−1 · 2-3→−2 · 4-6→−3; si queda alguno, repelido |
 | Bloqueo al cruzar | el ocupante deja pasar o bloquea (combate); online 15 s → bloquear |

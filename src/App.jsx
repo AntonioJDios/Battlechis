@@ -12,6 +12,8 @@ import SiegeModal from './components/SiegeModal';
 import NegotiationModal from './components/NegotiationModal';
 import FortifyModal from './components/FortifyModal';
 import BombModal from './components/BombModal';
+import HandPanel from './components/HandPanel';
+import DefenseModal from './components/DefenseModal';
 import Lobby from './components/Lobby';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
@@ -54,6 +56,8 @@ export default function App() {
     siegeState,
     negotiationState,
     bombState,
+    defenseState,
+    hands,
     shieldPurchasedThisTurn,
     brutalCards,
     startGame,
@@ -69,8 +73,11 @@ export default function App() {
     executeSurpriseDraw,
     executeSiegeRoll,
     executeBomb,
+    playCard,
     respondNegotiation,
     resolveNegotiation,
+    respondDefense,
+    resolveDefense,
     retreatCombat,
     retreatDefender,
     proposeAlliance,
@@ -124,6 +131,30 @@ export default function App() {
       return () => clearTimeout(t);
     }
   }, [negotiationState, authoritative, onlineActive, resolveNegotiation]);
+
+  // ── Reactive SUPER DEFENSE ──
+  const defDefender = defenseState
+    ? players.find((p) => p.faction === defenseState.defenderFaction)
+    : null;
+  // Show the defense prompt to a HUMAN defender (online: only my seat; local: any human).
+  const showDefenseModal = Boolean(
+    defenseState && !defenseState.response && defDefender && !defDefender.isBot &&
+    (onlineActive ? myFactions.includes(defenseState.defenderFaction) : true)
+  );
+  const defenseWaiting = Boolean(defenseState && !showDefenseModal);
+
+  // Resolve the defense on the attacker-authoritative client (or on timeout → skip).
+  useEffect(() => {
+    if (!defenseState) return;
+    if (onlineActive && !authoritative) return;
+    if (defenseState.response) { resolveDefense(); return; }
+    if (defenseState.deadline) {
+      const ms = defenseState.deadline - Date.now();
+      if (ms <= 0) { resolveDefense(); return; }
+      const t = setTimeout(() => resolveDefense(), ms + 150);
+      return () => clearTimeout(t);
+    }
+  }, [defenseState, authoritative, onlineActive, resolveDefense]);
 
   // Setup lobby state
   const [playerCount, setPlayerCount] = useState(5);
@@ -731,8 +762,19 @@ export default function App() {
 
       </main>
 
+      {/* Your secret hand (only shown to you) */}
+      {gameStarted && phase !== 'GAME_OVER' && isMyTurn && (
+        <HandPanel
+          hand={hands[players[currentTurn]?.faction]}
+          players={players}
+          currentTurn={currentTurn}
+          onPlay={guardAuth(playCard)}
+          canPlay={phase === 'MOVE' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && !bombState && !defenseState}
+        />
+      )}
+
       {/* Floating game controls — only for the player whose turn it is */}
-      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && !bombState && isMyTurn && (
+      {gameStarted && phase !== 'GAME_OVER' && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && !bombState && !defenseState && isMyTurn && (
         <GameControls
           phase={phase}
           currentTurn={currentTurn}
@@ -821,6 +863,23 @@ export default function App() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <div className="animate-fade-in" style={{ pointerEvents: 'all', background: '#0f121d', border: '1px solid rgba(0,240,255,0.3)', borderRadius: 8, padding: '16px 22px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
             <p className="font-mono text-[12px] text-cyan-400 animate-pulse text-center">⏳ Esperando respuesta del enemigo…</p>
+          </div>
+        </div>
+      )}
+
+      {/* Reactive super-defense: prompt for the defender, waiting overlay for the rest */}
+      {showDefenseModal && (
+        <DefenseModal
+          defenseState={defenseState}
+          onRespond={respondDefense}
+          players={players}
+          graph={graph}
+        />
+      )}
+      {defenseWaiting && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div className="animate-fade-in" style={{ pointerEvents: 'all', background: '#0f121d', border: '1px solid rgba(0,230,118,0.3)', borderRadius: 8, padding: '16px 22px', boxShadow: '0 8px 32px rgba(0,0,0,0.7)' }}>
+            <p className="font-mono text-[12px] text-green-400 animate-pulse text-center">🛡️ El defensor decide si usa Super Defensa…</p>
           </div>
         </div>
       )}

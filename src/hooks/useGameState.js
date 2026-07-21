@@ -7,15 +7,26 @@ export const SURPRISE_CARDS = [+5, +3, +2, +1, -1, -2, -3];
 
 // Build the surprise draw deck. In "brutal" mode we sprinkle in powerful cards:
 //   💣 bomb (wipe any base) and 👑 instant NÚCLEO victory (rare).
+export const BRUTAL_CARD_TYPES = ['bomb', 'nucleo', 'endgame', 'superdef'];
+
 export function buildSurpriseDeck(brutal) {
   const deck = SURPRISE_CARDS.map((v) => ({ t: 'troops', v }));
   if (brutal) {
     deck.push({ t: 'bomb' }, { t: 'bomb' });   // 2 nukes
+    deck.push({ t: 'superdef' }, { t: 'superdef' }); // 2 super-defense
     deck.push({ t: 'nucleo' });                 // 1 instant NÚCLEO win (rare)
     deck.push({ t: 'endgame' });                // 1 sudden death: leader wins now (rare)
   }
   return deck;
 }
+
+// Human-readable card info (for hand UI / logs)
+export const CARD_INFO = {
+  bomb: { icon: '💣', name: 'Bomba atómica', kind: 'attack' },
+  nucleo: { icon: '👑', name: 'Victoria del núcleo', kind: 'attack' },
+  endgame: { icon: '🏁', name: 'Fin de partida', kind: 'attack' },
+  superdef: { icon: '🛡️', name: 'Super defensa', kind: 'defense' },
+};
 
 export function useGameState(online = null) {
   // Online config (null = offline single-device play, unchanged behaviour):
@@ -56,6 +67,10 @@ export function useGameState(online = null) {
   const [negotiationState, setNegotiationState] = useState(null); // road-crossing negotiation
   const [pendingAdvance, setPendingAdvance] = useState(null); // {fromId, toId} — continue after winning a block
   const [bombState, setBombState] = useState(null); // {nodeId} — surprise NUKE: pick a base to wipe
+  const [defenseState, setDefenseState] = useState(null); // reactive Super Defense prompt on an attacked base
+
+  // Secret card hands, per faction: { [factionId]: ['bomb'|'nucleo'|'endgame'|'superdef', ...] }
+  const [hands, setHands] = useState({});
 
   // Shields: max 1 purchase per turn
   const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
@@ -128,6 +143,7 @@ export function useGameState(online = null) {
     setPhase('RECRUIT');
     setGameStarted(true);
     setShieldPurchasedThisTurn(false);
+    setHands({});
 
     const firstPlayer = gamePlayers[0];
     const firstBases = Object.keys(initialBoard).filter(id => {
@@ -702,12 +718,62 @@ export function useGameState(online = null) {
     }
     const destIsBase = ['hq', 'neutral', 'center'].includes(destNode.type);
     setBoardState(board);
+    // Reactive SUPER DEFENSE: if the defender holds a superdef card and this is a
+    // base attack, prompt them to stop the attack before combat/siege.
+    const defenderCanDefend = destIsBase && (hands[destState.occupyingFaction] || []).includes('superdef');
+    if (defenderCanDefend) {
+      const defender = players.find((p) => p.faction === destState.occupyingFaction);
+      const deadline = (isOnline && !defender?.isBot) ? Date.now() + 15000 : null;
+      setPhase('DEFENSE');
+      setDefenseState({
+        originId, destId, troops, continueTo,
+        siege: (destState.shields || 0) > 0,
+        defenderFaction: destState.occupyingFaction,
+        deadline, response: null,
+      });
+      addLog(`🛡️ ${cp.name.toUpperCase()} ataca ${destNode.name}. ¡${defender?.name} puede usar SUPER DEFENSA!`, 'info');
+      return;
+    }
     if (destIsBase && (destState.shields || 0) > 0) {
       initSiege(originId, destId, troops); // fortified → siege first
     } else {
       initCombat(originId, destId, troops, continueTo);
     }
-  }, [players, currentTurn, boardState, graph, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
+  }, [players, currentTurn, boardState, graph, hands, isOnline, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
+
+  // Defender's answer to a Super Defense prompt: 'use' (stop the attack) or 'skip'.
+  const respondDefense = useCallback((response) => {
+    setDefenseState((prev) => (prev ? { ...prev, response } : prev));
+  }, []);
+
+  // Resolve the defense prompt (attacker-authoritative or on timeout). Null = skip.
+  const resolveDefense = useCallback(() => {
+    if (!defenseState) return;
+    const { originId, destId, troops, continueTo, siege, defenderFaction, response } = defenseState;
+    const effective = response || 'skip';
+    setDefenseState(null);
+    setPhase('MOVE');
+    if (effective === 'use') {
+      // Consume one superdef card; the attack is repelled, attacker retreats to origin.
+      setHands((prev) => {
+        const h = [...(prev[defenderFaction] || [])];
+        const i = h.indexOf('superdef');
+        if (i >= 0) h.splice(i, 1);
+        return { ...prev, [defenderFaction]: h };
+      });
+      const defender = players.find((p) => p.faction === defenderFaction);
+      const newBoard = { ...boardState };
+      if (newBoard[originId]) newBoard[originId] = { ...newBoard[originId], troops: newBoard[originId].troops + troops };
+      setBoardState(newBoard);
+      addLog(`🛡️ ¡SUPER DEFENSA! ${defender?.name.toUpperCase()} rechaza el ataque a ${graph[destId]?.name}. Las tropas se repliegan.`, 'success');
+      SoundManager.playSiegeFail?.();
+      resolvePostMovement(newBoard);
+    } else {
+      // Not used → proceed with the original attack.
+      if (siege) initSiege(originId, destId, troops);
+      else initCombat(originId, destId, troops, continueTo);
+    }
+  }, [defenseState, boardState, players, graph, addLog, initSiege, initCombat, resolvePostMovement]);
 
   // Defender's answer: 'pass' (let through) or 'block' (fight).
   const respondNegotiation = useCallback((response) => {
@@ -924,36 +990,15 @@ export function useGameState(online = null) {
     const currentPlayer = players[currentTurn];
     const nodeName = graph[nodeId]?.name ?? 'casilla sorpresa';
 
-    // 👑 Instant NÚCLEO victory
-    if (drawn.t === 'nucleo') {
+    // Brutal cards go to the drawer's SECRET HAND (played later; superdef is reactive).
+    if (BRUTAL_CARD_TYPES.includes(drawn.t)) {
+      const faction = currentPlayer.faction;
+      setHands((prev) => ({ ...prev, [faction]: [...(prev[faction] || []), drawn.t] }));
+      const info = CARD_INFO[drawn.t];
+      addLog(`🃏 ${currentPlayer?.name.toUpperCase()} consiguió una carta: ${info.icon} ${info.name}.`, 'success');
       setSurpriseState(null);
-      addLog(`👑 ¡CARTA DEL NÚCLEO! ${currentPlayer?.name.toUpperCase()} reclama el control estratégico y GANA la partida.`, 'success');
-      SoundManager.playConquest();
-      setPhase('GAME_OVER');
-      return;
-    }
-
-    // 🏁 Sudden death: the game ends NOW; the player with most bases (tiebreak: troops) wins.
-    if (drawn.t === 'endgame') {
-      setSurpriseState(null);
-      const score = (f) => countStrategicBases(f, boardState) * 1000 + getTotalTroops(f, boardState);
-      const active = players.filter((p) => !p.eliminated);
-      let winner = active[0] || players[0];
-      active.forEach((p) => { if (score(p.faction) > score(winner.faction)) winner = p; });
-      const bases = countStrategicBases(winner.faction, boardState);
-      const troops = getTotalTroops(winner.faction, boardState);
-      addLog(`🏁 ¡FIN DE PARTIDA SÚBITO! Gana ${winner.name.toUpperCase()} (${bases} bases, ${troops} tropas).`, 'success');
-      SoundManager.playConquest();
-      setPhase('GAME_OVER');
-      return;
-    }
-
-    // 💣 Atomic bomb: the drawer must pick a base to wipe.
-    if (drawn.t === 'bomb') {
-      setSurpriseState(null);
-      setPhase('BOMB');
-      setBombState({ fromNodeId: nodeId });
-      addLog(`💣 ¡BOMBA ATÓMICA para ${currentPlayer?.name.toUpperCase()}! Elige una base para arrasar.`, 'error');
+      setPhase('MOVE');
+      resolvePostMovement(boardState);
       return;
     }
 
@@ -977,7 +1022,8 @@ export function useGameState(online = null) {
     resolvePostMovement(newBoard);
   }, [surpriseState, brutalCards, boardState, players, currentTurn, graph, addLog, resolvePostMovement, countStrategicBases, getTotalTroops]);
 
-  // --- ATOMIC BOMB: wipe the chosen base (any base on the board) then continue. ---
+  // --- ATOMIC BOMB: wipe the chosen base. Playing a card does NOT consume the
+  //     player's move, so afterwards we just return to MOVE (turn continues). ---
   const executeBomb = useCallback((targetNodeId) => {
     if (!bombState) return;
     const currentPlayer = players[currentTurn];
@@ -990,10 +1036,51 @@ export function useGameState(online = null) {
     setBombState(null);
     addLog(`💥 BOMBA ATÓMICA: ${currentPlayer?.name.toUpperCase()} arrasó ${node.name}. ¡Tropas y escudos destruidos!`, 'error');
     SoundManager.playExplosion?.();
-    // A wipe can eliminate a player / trigger victory checks via resolvePostMovement.
-    setPhase('MOVE');
-    resolvePostMovement(newBoard);
-  }, [bombState, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
+    const over = checkVictoryConditions(newBoard);
+    if (!over) setPhase('MOVE'); // turn continues (player can still roll/move)
+  }, [bombState, boardState, players, currentTurn, graph, addLog, checkVictoryConditions]);
+
+  // --- PLAY an offensive card from your hand (on your turn). Consumes the card. ---
+  const playCard = useCallback((cardType) => {
+    const cp = players[currentTurn];
+    if (!cp) return;
+    const faction = cp.faction;
+    const hand = hands[faction] || [];
+    if (!hand.includes(cardType)) return;
+    if (CARD_INFO[cardType]?.kind !== 'attack') return; // superdef is reactive only
+
+    const consume = () => setHands((prev) => {
+      const h = [...(prev[faction] || [])];
+      const i = h.indexOf(cardType);
+      if (i >= 0) h.splice(i, 1);
+      return { ...prev, [faction]: h };
+    });
+
+    if (cardType === 'nucleo') {
+      consume();
+      addLog(`👑 ${cp.name.toUpperCase()} juega VICTORIA DEL NÚCLEO y GANA la partida.`, 'success');
+      SoundManager.playConquest();
+      setPhase('GAME_OVER');
+      return;
+    }
+    if (cardType === 'endgame') {
+      consume();
+      const score = (f) => countStrategicBases(f, boardState) * 1000 + getTotalTroops(f, boardState);
+      const active = players.filter((p) => !p.eliminated);
+      let winner = active[0] || players[0];
+      active.forEach((p) => { if (score(p.faction) > score(winner.faction)) winner = p; });
+      addLog(`🏁 ${cp.name.toUpperCase()} juega FIN DE PARTIDA. Gana ${winner.name.toUpperCase()} (${countStrategicBases(winner.faction, boardState)} bases).`, 'success');
+      SoundManager.playConquest();
+      setPhase('GAME_OVER');
+      return;
+    }
+    if (cardType === 'bomb') {
+      consume();
+      setPhase('BOMB');
+      setBombState({});
+      addLog(`💣 ${cp.name.toUpperCase()} juega BOMBA ATÓMICA. Elige una base para arrasar.`, 'error');
+    }
+  }, [players, currentTurn, hands, boardState, countStrategicBases, getTotalTroops, addLog]);
 
   // --- RESOLVE NEUTRAL BASE CONQUEST (5-6 captures, 1-4 sieges) ---
   const executeConquestRoll = useCallback((rollValue = null) => {
@@ -1193,7 +1280,7 @@ export function useGameState(online = null) {
 
   // --- BOT AI ROTATION TIMER/EFFECT ---
   useEffect(() => {
-    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState || pendingAdvance || bombState) return;
+    if (phase === 'SETUP' || phase === 'GAME_OVER' || combatState || conquestState || surpriseState || siegeState || negotiationState || pendingAdvance || bombState || defenseState) return;
     if (!botAuthority) return; // online: only the host drives bots
 
     const currentPlayer = players[currentTurn];
@@ -1254,6 +1341,17 @@ export function useGameState(online = null) {
 
       // 2. MOVE PHASE
       if (phase === 'MOVE') {
+        // Play an offensive card from hand first (before rolling): win-now cards, else bomb.
+        if (diceRoll === null) {
+          const myHand = hands[currentPlayer.faction] || [];
+          const totalBases = Object.keys(boardState).filter(id => {
+            const n = graph[id]; const s = boardState[id];
+            return s.occupyingFaction === currentPlayer.faction && ['hq','neutral','center'].includes(n.type);
+          }).length;
+          if (myHand.includes('nucleo')) { playCard('nucleo'); return; }
+          if (myHand.includes('endgame') && totalBases >= 3) { playCard('endgame'); return; }
+          if (myHand.includes('bomb')) { playCard('bomb'); return; } // → BOMB phase, bot auto-targets
+        }
         if (diceRoll === null) {
           rollMovement();
           return;
@@ -1376,6 +1474,8 @@ export function useGameState(online = null) {
     negotiationState,
     pendingAdvance,
     bombState,
+    defenseState,
+    hands,
     botAuthority,
     shieldPurchasedThisTurn,
     placeShield,
@@ -1383,6 +1483,7 @@ export function useGameState(online = null) {
     findCrossingConflict,
     initNegotiation,
     resolveMoveTo,
+    playCard,
   ]);
 
   // --- BOT AUTO-RESOLVE: Combat ---
@@ -1484,6 +1585,22 @@ export function useGameState(online = null) {
     return () => clearTimeout(timer);
   }, [negotiationState, botAuthority, players, boardState, respondNegotiation]);
 
+  // --- BOT DEFENDER: decide a Super Defense prompt on the host ---
+  // Uses the card if the attack looks like it could take the base.
+  useEffect(() => {
+    if (!defenseState || defenseState.response) return;
+    if (!botAuthority) return;
+    const defender = players.find(p => p.faction === defenseState.defenderFaction);
+    if (!defender?.isBot) return;
+
+    const timer = setTimeout(() => {
+      const defTroops = boardState[defenseState.destId]?.troops || 0;
+      // Use it when the attacker force is at least the garrison (base in real danger).
+      respondDefense(defenseState.troops >= defTroops ? 'use' : 'skip');
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [defenseState, botAuthority, players, boardState, respondDefense]);
+
   // --- Highlight owned bases during RECRUIT for human player ---
   useEffect(() => {
     if (phase !== 'RECRUIT') return;
@@ -1503,12 +1620,12 @@ export function useGameState(online = null) {
   const getSnapshot = useCallback(() => ({
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
-    surpriseState, siegeState, negotiationState, bombState, alliances, nucleoData,
-    boardSize, brutalCards,
+    surpriseState, siegeState, negotiationState, bombState, defenseState,
+    hands, alliances, nucleoData, boardSize, brutalCards,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
-       surpriseState, siegeState, negotiationState, bombState, alliances, nucleoData,
-       boardSize, brutalCards]);
+       surpriseState, siegeState, negotiationState, bombState, defenseState,
+       hands, alliances, nucleoData, boardSize, brutalCards]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1527,6 +1644,8 @@ export function useGameState(online = null) {
     if (snap.siegeState !== undefined) setSiegeState(snap.siegeState);
     if (snap.negotiationState !== undefined) setNegotiationState(snap.negotiationState);
     if (snap.bombState !== undefined) setBombState(snap.bombState);
+    if (snap.defenseState !== undefined) setDefenseState(snap.defenseState);
+    if (snap.hands !== undefined) setHands(snap.hands);
     if (snap.alliances !== undefined) setAlliances(snap.alliances);
     if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
     // Board layout config must match so every client rebuilds the same graph.
@@ -1556,6 +1675,8 @@ export function useGameState(online = null) {
     siegeState,
     negotiationState,
     bombState,
+    defenseState,
+    hands,
     shieldPurchasedThisTurn,
     brutalCards,
     boardSize,
@@ -1574,8 +1695,11 @@ export function useGameState(online = null) {
     executeSurpriseDraw,
     executeSiegeRoll,
     executeBomb,
+    playCard,
     respondNegotiation,
     resolveNegotiation,
+    respondDefense,
+    resolveDefense,
     retreatCombat,
     retreatDefender,
     proposeAlliance,
