@@ -173,6 +173,8 @@ export default function App() {
   // Game options chosen by the creator
   const [boardSizeOpt, setBoardSizeOpt] = useState('large'); // 'large' | 'small'
   const [brutalOpt, setBrutalOpt] = useState(false); // brutal cards (bomb + instant núcleo win)
+  // Landing page: show "Jugar / Instalar" first; deep-link joins skip straight in.
+  const [homeScreen, setHomeScreen] = useState(true);
 
   // ── PWA install ──
   const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
@@ -359,33 +361,55 @@ export default function App() {
           <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-cyan-400"></div>
           <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-cyan-400"></div>
 
-          {/* PWA install button */}
-          {canShowInstall && (
-            <button
-              onClick={handleInstall}
-              className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-green-400/60 bg-green-500/10 text-green-300 font-tactical text-[11px] font-bold hover:bg-green-500/20 transition-all"
-            >
-              📲 Instalar app
-            </button>
-          )}
-
           {/* iOS install instructions */}
           {showIosHelp && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center p-4 bg-black/85 rounded" onClick={() => setShowIosHelp(false)}>
+            <div className="fixed inset-0 z-[800] flex items-center justify-center p-4 bg-black/85" onClick={() => setShowIosHelp(false)}>
               <div className="max-w-xs bg-[#101424] border border-cyan-500/40 rounded-lg p-4 text-center" onClick={(e) => e.stopPropagation()}>
                 <div className="text-3xl mb-2">📲</div>
-                <p className="font-tactical text-sm text-white font-bold mb-2">Instalar en iPhone</p>
-                <p className="font-mono text-[11px] text-gray-300 leading-relaxed">
-                  1. Pulsa el botón <strong>Compartir</strong> <span className="text-cyan-400">⬆️</span> (abajo en Safari)<br/>
-                  2. Elige <strong>"Añadir a pantalla de inicio"</strong><br/>
-                  3. Confirma con <strong>Añadir</strong>
+                <p className="font-tactical text-sm text-white font-bold mb-2">Instalar en iPhone / iPad</p>
+                <p className="font-mono text-[11px] text-gray-300 leading-relaxed text-left">
+                  ⚠️ Tiene que ser con <strong>Safari</strong> (Chrome no puede instalar en iPhone).<br/><br/>
+                  1. Abre <strong>battlechis.vercel.app</strong> en <strong>Safari</strong>.<br/>
+                  2. Pulsa el botón <strong>Compartir</strong> <span className="text-cyan-400">⎋</span> (el cuadrado con la flecha ↑, abajo).<br/>
+                  3. Baja y elige <strong>"Añadir a pantalla de inicio"</strong>.<br/>
+                  4. Pulsa <strong>Añadir</strong>.
                 </p>
                 <button onClick={() => setShowIosHelp(false)} className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 px-6 text-xs mt-3">Entendido</button>
               </div>
             </div>
           )}
 
-          {(() => {
+          {homeScreen ? (
+            /* ── PORTADA: Jugar / Instalar ── */
+            <div className="text-center py-3 animate-fade-in">
+              <h1 className="font-tactical text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
+                BATTLECHIS
+              </h1>
+              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-6">
+                Risk + Parchís táctico
+              </p>
+              <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                <button
+                  onClick={() => setHomeScreen(false)}
+                  className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-3 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+                >
+                  <Play className="w-5 h-5 mr-1" /> JUGAR
+                </button>
+                {canShowInstall ? (
+                  <button
+                    onClick={handleInstall}
+                    className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-widest text-base py-3 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
+                  >
+                    📲 INSTALAR APP
+                  </button>
+                ) : (
+                  <p className="font-mono text-[9px] text-gray-600">
+                    {isStandalone ? '✓ App instalada' : 'La app ya está instalada o tu navegador no permite instalarla aquí.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (() => {
             const total = setupPlayers.length;
             const step = Math.min(wizardIdx, total);          // clamp if count shrank
             const onReview = step >= total;
@@ -488,10 +512,9 @@ export default function App() {
                     {/* Nav */}
                     <div className="flex justify-between items-center gap-3 mt-4 max-w-md mx-auto">
                       <button
-                        onClick={() => setWizardIdx(step - 1)}
-                        disabled={step === 0}
-                        className="btn-tactical border-slate-700 text-slate-400 disabled:opacity-30 py-2 px-5 text-xs"
-                      >◀ Anterior</button>
+                        onClick={() => { if (step === 0) setHomeScreen(true); else setWizardIdx(step - 1); }}
+                        className="btn-tactical border-slate-700 text-slate-400 py-2 px-5 text-xs"
+                      >◀ {step === 0 ? 'Inicio' : 'Anterior'}</button>
                       <button
                         onClick={() => setWizardIdx(step + 1)}
                         className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 px-6 text-xs font-bold"
