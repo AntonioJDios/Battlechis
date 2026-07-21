@@ -354,7 +354,7 @@ export default function App() {
   if (!gameStarted) {
     return (
       <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px', zIndex: 10 }}>
-        <div className="w-full max-w-3xl border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
+        <div className="w-full max-w-lg mx-auto border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
 
           {/* Top corner design markers */}
           <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-cyan-400"></div>
