@@ -9,8 +9,8 @@ import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw
  * Transport comes from useMultiplayer (passed in via props). This component
  * is pure UI + orchestration; it doesn't know the game rules.
  */
-export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsChange, onBack, onLaunch }) {
-  const [view, setView] = useState(initialJoinCode ? 'join' : 'choose'); // choose | create | join | waiting
+export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialView = 'choose', onSeatsChange, onBack, onLaunch }) {
+  const [view, setView] = useState(initialJoinCode ? 'join' : initialView); // choose | create | join | waiting | mygames | reconnecting
   const [code, setCode] = useState(initialJoinCode);
   const [name, setName] = useState('');
   const [copied, setCopied] = useState(false);
@@ -90,13 +90,12 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
   // jump straight to picking a commander — no need to press "Buscar".
   const autoFound = React.useRef(false);
   useEffect(() => {
-    if (autoFound.current) return;
-    if (mp.available && initialJoinCode && view === 'join') {
-      autoFound.current = true;
-      doFind();
-    }
+    if (autoFound.current || !mp.available) return;
+    autoFound.current = true;
+    if (initialJoinCode) doFind();
+    else if (initialView === 'mygames') loadMyGames(); // opened straight from the home screen
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mp.available, initialJoinCode]);
+  }, [mp.available]);
 
   // Step 2: claim the chosen seat.
   const doClaim = async (seatIndex) => {

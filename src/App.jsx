@@ -176,6 +176,7 @@ export default function App() {
   const [brutalOpt, setBrutalOpt] = useState(false); // brutal cards (bomb + instant núcleo win)
   // Landing page: show "Jugar / Instalar" first; deep-link joins skip straight in.
   const [homeScreen, setHomeScreen] = useState(true);
+  const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
 
   // ── PWA install ──
   const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
@@ -396,6 +397,14 @@ export default function App() {
                 >
                   <Play className="w-5 h-5 mr-1" /> JUGAR
                 </button>
+                {mp.available && (
+                  <button
+                    onClick={() => { setLobbyInitialView('mygames'); setShowLobby(true); }}
+                    className="btn-tactical border-slate-500 text-slate-300 bg-slate-800/30 font-bold tracking-widest text-sm py-2.5 hover:bg-slate-700/40"
+                  >
+                    📂 MIS PARTIDAS
+                  </button>
+                )}
                 {canShowInstall ? (
                   <button
                     onClick={handleInstall}
@@ -591,8 +600,9 @@ export default function App() {
               mp={mp}
               seatsConfig={seatsConfig}
               initialJoinCode={initialJoinCode}
+              initialView={lobbyInitialView}
               onSeatsChange={() => {}}
-              onBack={() => { mp.leaveGame(); setShowLobby(false); }}
+              onBack={() => { mp.leaveGame(); setShowLobby(false); setLobbyInitialView('choose'); }}
               onLaunch={handleLaunchOnline}
             />
           </div>
