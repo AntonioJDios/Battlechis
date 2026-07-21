@@ -10,14 +10,16 @@ export const SURPRISE_CARDS = [+5, +3, +2, +1, -1, -2, -3];
 export const BRUTAL_CARD_TYPES = ['bomb', 'nucleo', 'endgame', 'superdef'];
 
 export function buildSurpriseDeck(brutal) {
-  const deck = SURPRISE_CARDS.map((v) => ({ t: 'troops', v }));
-  if (brutal) {
-    deck.push({ t: 'bomb' }, { t: 'bomb' });   // 2 nukes
-    deck.push({ t: 'superdef' }, { t: 'superdef' }); // 2 super-defense
-    deck.push({ t: 'nucleo' });                 // 1 instant NÚCLEO win (rare)
-    deck.push({ t: 'endgame' });                // 1 sudden death: leader wins now (rare)
-  }
-  return deck;
+  // Troop cards are the common draw.
+  const troops = SURPRISE_CARDS.map((v) => ({ t: 'troops', v })); // 7 cards
+  if (!brutal) return troops;
+  // Brutal mode: troop cards stay the MAJORITY (×3 ≈ 21); brutal cards are rare.
+  const deck = [...troops, ...troops, ...troops];
+  deck.push({ t: 'bomb' });      // rare
+  deck.push({ t: 'superdef' });  // rare
+  deck.push({ t: 'nucleo' });    // very rare (instant win)
+  deck.push({ t: 'endgame' });   // very rare (sudden death)
+  return deck; // 21 troops + 4 brutal = 25 → brutal ≈ 16%
 }
 
 // Human-readable card info (for hand UI / logs)
