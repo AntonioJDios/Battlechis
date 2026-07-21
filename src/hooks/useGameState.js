@@ -754,7 +754,9 @@ export function useGameState(online = null) {
     setDefenseState(null);
     setPhase('MOVE');
     if (effective === 'use') {
-      // Consume one superdef card; the attack is repelled, attacker retreats to origin.
+      // Consume one superdef card. Instead of fighting, the defender wipes out the
+      // ENTIRE attacking platoon ("todos muertos") — those troops already left the
+      // origin, so they simply don't come back. The base keeps its garrison.
       setHands((prev) => {
         const h = [...(prev[defenderFaction] || [])];
         const i = h.indexOf('superdef');
@@ -762,12 +764,9 @@ export function useGameState(online = null) {
         return { ...prev, [defenderFaction]: h };
       });
       const defender = players.find((p) => p.faction === defenderFaction);
-      const newBoard = { ...boardState };
-      if (newBoard[originId]) newBoard[originId] = { ...newBoard[originId], troops: newBoard[originId].troops + troops };
-      setBoardState(newBoard);
-      addLog(`🛡️ ¡SUPER DEFENSA! ${defender?.name.toUpperCase()} rechaza el ataque a ${graph[destId]?.name}. Las tropas se repliegan.`, 'success');
-      SoundManager.playSiegeFail?.();
-      resolvePostMovement(newBoard);
+      addLog(`🛡️ ¡SUPER DEFENSA! ${defender?.name.toUpperCase()} aniquila a los ${troops} atacantes en ${graph[destId]?.name}. ¡Todos muertos!`, 'success');
+      SoundManager.playExplosion?.();
+      resolvePostMovement(boardState); // attackers already debited from origin = destroyed
     } else {
       // Not used → proceed with the original attack.
       if (siege) initSiege(originId, destId, troops);

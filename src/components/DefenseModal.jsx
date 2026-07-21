@@ -43,13 +43,13 @@ export default function DefenseModal({ defenseState, onRespond, players, graph }
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           <p className="font-mono text-[11px] text-gray-300 text-center leading-relaxed">
             Atacan <strong style={{ color: defColor }}>{baseName}</strong> con <strong>{troops}</strong> tropa(s).
-            <br />¿Usas tu carta de <strong>Super Defensa</strong> para parar el ataque?
+            <br />¿Te defiendes tirando el dado, o sacas la carta de <strong>Super Defensa</strong>?
           </p>
 
           {secondsLeft !== null && (
             <div className="font-tactical text-2xl font-black" style={{ color: secondsLeft <= 5 ? '#f87171' : defColor }}>
               {secondsLeft}s
-              <span className="block text-[8px] font-mono text-gray-500 text-center">sin respuesta → no se usa</span>
+              <span className="block text-[8px] font-mono text-gray-500 text-center">sin respuesta → combate normal</span>
             </div>
           )}
 
@@ -58,13 +58,13 @@ export default function DefenseModal({ defenseState, onRespond, players, graph }
               onClick={() => onRespond('use')}
               className="btn-tactical flex-1 py-3 text-xs font-bold border-green-500 text-green-400 bg-green-950/20 hover:bg-green-500/20 flex items-center justify-center gap-1"
             >
-              <ShieldCheck className="w-4 h-4" /> USAR (parar)
+              <ShieldCheck className="w-4 h-4" /> 🛡️ Carta: ¡todos muertos!
             </button>
             <button
               onClick={() => onRespond('skip')}
               className="btn-tactical flex-1 py-3 text-xs font-bold border-slate-600 text-slate-300 hover:bg-slate-700/30 flex items-center justify-center gap-1"
             >
-              <Swords className="w-4 h-4" /> Dejar combate
+              <Swords className="w-4 h-4" /> 🎲 Tirar dado
             </button>
           </div>
         </div>
