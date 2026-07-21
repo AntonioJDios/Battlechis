@@ -83,6 +83,13 @@ create policy battlechis_games_update
     auth.uid() = any(member_ids)
   );
 
+-- Borrar: cualquier miembro puede borrar la partida (para tu lista "mis partidas").
+drop policy if exists battlechis_games_delete on public.battlechis_games;
+create policy battlechis_games_delete
+  on public.battlechis_games for delete
+  to authenticated
+  using (auth.uid() = any(member_ids));
+
 -- ── Realtime: emite los cambios de esta tabla a los clientes suscritos ──
 -- (idempotente: ignora el error si la tabla ya está en la publicación)
 do $$

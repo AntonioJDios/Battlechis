@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
-import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2 } from 'lucide-react';
+import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw, FolderOpen } from 'lucide-react';
 
 /**
  * Online lobby: create a game (configuring the 5 seats) or join by code,
@@ -17,7 +17,27 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState(null);
   const [foundGame, setFoundGame] = useState(null); // game row looked up by code
+  const [myGames, setMyGames] = useState(null); // in-progress games list (null = not loaded)
   const linkRef = React.useRef(null);
+
+  // Load this device's unfinished games.
+  const loadMyGames = async () => {
+    setView('mygames'); setMyGames(null); setLocalError(null);
+    try { setMyGames(await mp.listMyGames()); }
+    catch (e) { setLocalError(e.message); setMyGames([]); }
+  };
+
+  // Resume a saved game: playing → into the game; waiting → back to its lobby room.
+  const resumeGame = (g) => {
+    mp.reconnect(g);
+    setView(g.status === 'playing' ? 'reconnecting' : 'waiting');
+  };
+
+  const delGame = async (g) => {
+    if (!window.confirm('¿Borrar esta partida? No se puede deshacer.')) return;
+    await mp.deleteGame(g.id);
+    setMyGames((prev) => (prev || []).filter((x) => x.id !== g.id));
+  };
 
   const game = mp.game;
   const isHost = game && mp.userId === game.host_id;
@@ -308,6 +328,56 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
     );
   }
 
+  // ── My in-progress games (resume / delete) ──
+  if (view === 'mygames') {
+    return (
+      <Shell onBack={() => setView('choose')} title="Mis partidas">
+        <div className="flex flex-col gap-2">
+          {myGames === null ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-cyan-400 font-mono text-[11px]">
+              <Loader2 className="w-5 h-5 animate-spin" /> Cargando…
+            </div>
+          ) : myGames.length === 0 ? (
+            <p className="font-mono text-[11px] text-gray-500 text-center py-6">No tienes partidas en curso en este dispositivo.</p>
+          ) : (
+            myGames.map((g) => {
+              const seats = g.state?.seats ?? [];
+              const humans = seats.filter((s) => s.type === 'human' && s.userId).length;
+              const when = g.updated_at ? new Date(g.updated_at).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+              return (
+                <div key={g.id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-800 rounded px-2 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-tactical text-sm font-black text-cyan-400 tracking-widest">{g.code}</span>
+                      <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded ${g.status === 'playing' ? 'text-green-400 bg-green-950/40' : 'text-amber-400 bg-amber-950/40'}`}>
+                        {g.status === 'playing' ? 'EN JUEGO' : 'EN ESPERA'}
+                      </span>
+                    </div>
+                    <div className="font-mono text-[9px] text-gray-500 truncate">👤 {humans} · {when}</div>
+                  </div>
+                  <button
+                    onClick={() => resumeGame(g)}
+                    className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-1.5 px-3 text-[11px] font-bold flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Volver
+                  </button>
+                  <button
+                    onClick={() => delGame(g)}
+                    title="Borrar partida"
+                    className="p-2 border border-red-500/40 rounded text-red-400 hover:bg-red-900/30 transition-all shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+          {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
+        </div>
+      </Shell>
+    );
+  }
+
   // ── Choose: create or join ──
   return (
     <Shell onBack={onBack} title="Multijugador online">
@@ -329,6 +399,12 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', onSeatsCh
           className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-3 text-sm font-bold flex items-center justify-center gap-2"
         >
           <Wifi className="w-4 h-4" /> Unirse con código
+        </button>
+        <button
+          onClick={loadMyGames}
+          className="btn-tactical border-slate-600 text-slate-300 hover:bg-slate-700/30 py-3 text-sm font-bold flex items-center justify-center gap-2"
+        >
+          <FolderOpen className="w-4 h-4" /> Mis partidas en curso
         </button>
         {humanCount === 0 && (
           <p className="font-mono text-[9px] text-amber-400 text-center">Marca al menos un puesto como 👤 HUMANO para crear una partida online.</p>

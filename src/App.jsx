@@ -58,6 +58,7 @@ export default function App() {
     bombState,
     defenseState,
     hands,
+    winner,
     shieldPurchasedThisTurn,
     brutalCards,
     startGame,
@@ -1007,20 +1008,33 @@ export default function App() {
       )}
 
       {/* Game Over Screen Overlay */}
-      {phase === 'GAME_OVER' && (
+      {phase === 'GAME_OVER' && (() => {
+        const wColor = winner ? FACTIONS[winner.faction]?.neon : 'var(--neon-green)';
+        const wRgb = winner ? FACTIONS[winner.faction]?.rgb : '0, 230, 118';
+        return (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-          <div className="w-full max-w-md border border-green-500/40 rounded bg-[#101424] text-center p-8 shadow-[0_0_50px_rgba(0,230,118,0.3)] animate-fade-in">
-            <ShieldAlert className="w-16 h-16 text-green-400 mx-auto mb-4 animate-bounce" />
-            <h2 className="font-tactical text-2xl font-black text-green-400 mb-1 uppercase">
-              MISIÓN COMPLETADA
-            </h2>
-            <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase mb-6">
-              PARTIDA FINALIZADA
-            </p>
-            
-            <p className="text-white font-mono text-sm mb-8 leading-relaxed">
-              El teatro de operaciones ha sido pacificado. Un comandante ha asegurado el control absoluto del sector de conflicto.
-            </p>
+          <div className="w-full max-w-md border rounded bg-[#101424] text-center p-8 animate-fade-in"
+            style={{ borderColor: `rgba(${wRgb},0.5)`, boxShadow: `0 0 50px rgba(${wRgb},0.35)` }}>
+            <div className="text-5xl mb-3">🏆</div>
+            {winner ? (
+              <>
+                <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase mb-2">Ganador de la batalla</p>
+                <div className="inline-flex items-center gap-2 mb-2">
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: wColor, boxShadow: `0 0 12px ${wColor}` }} />
+                  <h2 className="font-tactical text-2xl font-black uppercase" style={{ color: wColor }}>
+                    {winner.name}
+                  </h2>
+                </div>
+                {winner.reason && (
+                  <p className="text-gray-400 font-mono text-xs mb-6">{winner.reason}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 className="font-tactical text-2xl font-black text-green-400 mb-1 uppercase">MISIÓN COMPLETADA</h2>
+                <p className="text-white font-mono text-sm mb-6">La partida ha terminado.</p>
+              </>
+            )}
 
             <button
               onClick={() => window.location.reload()}
@@ -1031,7 +1045,8 @@ export default function App() {
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
     </div>
   );

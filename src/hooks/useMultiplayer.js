@@ -152,6 +152,26 @@ export function useMultiplayer() {
     applyRow(row); // hydrate the current state immediately
   }, [subscribe, applyRow]);
 
+  // ── List this device's unfinished games (waiting/playing) to resume or delete ──
+  const listMyGames = useCallback(async () => {
+    const uid = await ensureAuth();
+    const { data, error: selErr } = await supabase
+      .from(TABLE)
+      .select('*')
+      .contains('member_ids', [uid])
+      .neq('status', 'finished')
+      .order('updated_at', { ascending: false });
+    if (selErr) { setError(selErr.message); return []; }
+    return data || [];
+  }, [ensureAuth]);
+
+  // ── Delete a game row (any member can, e.g. from "my games") ──
+  const deleteGame = useCallback(async (gameId) => {
+    const { error: delErr } = await supabase.from(TABLE).delete().eq('id', gameId);
+    if (delErr) { setError(delErr.message); return false; }
+    return true;
+  }, []);
+
   // ── Claim a specific seat in a game (the player picks which commander) ──
   const claimSeat = useCallback(async (gameId, seatIndex, playerName) => {
     setConnecting(true);
@@ -233,6 +253,8 @@ export function useMultiplayer() {
     findGame,
     claimSeat,
     reconnect,
+    listMyGames,
+    deleteGame,
     refreshGame,
     pushState,
     setOnRemoteState,

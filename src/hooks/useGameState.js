@@ -74,6 +74,9 @@ export function useGameState(online = null) {
   // Secret card hands, per faction: { [factionId]: ['bomb'|'nucleo'|'endgame'|'superdef', ...] }
   const [hands, setHands] = useState({});
 
+  // Winner of the finished game: { faction, name, reason } | null
+  const [winner, setWinner] = useState(null);
+
   // Shields: max 1 purchase per turn
   const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
 
@@ -146,6 +149,7 @@ export function useGameState(online = null) {
     setGameStarted(true);
     setShieldPurchasedThisTurn(false);
     setHands({});
+    setWinner(null);
 
     const firstPlayer = gamePlayers[0];
     const firstBases = Object.keys(initialBoard).filter(id => {
@@ -247,9 +251,10 @@ export function useGameState(online = null) {
 
     // Win condition: last player standing
     if (activePlayers.length <= 1) {
-      const winner = activePlayers[0] || players[0];
+      const win = activePlayers[0] || players[0];
       setPhase('GAME_OVER');
-      addLog(`🏆 VICTORIA ABSOLUTA: ${winner.name.toUpperCase()} domina el sector.`, 'success');
+      setWinner({ faction: win.faction, name: win.name, reason: 'Último en pie' });
+      addLog(`🏆 VICTORIA ABSOLUTA: ${win.name.toUpperCase()} domina el sector.`, 'success');
       SoundManager.playConquest();
       return true;
     }
@@ -263,6 +268,7 @@ export function useGameState(online = null) {
       const controlled = countStrategicBases(p.faction, currentBoard);
       if (controlled >= threshold60) {
         setPhase('GAME_OVER');
+        setWinner({ faction: p.faction, name: p.name, reason: `Dominación (${controlled}/${totalBases} bases)` });
         addLog(`🌍 DOMINACIÓN TOTAL: ${p.name.toUpperCase()} controla ${controlled}/${totalBases} bases (${Math.round(controlled/totalBases*100)}%). ¡Victoria!`, 'success');
         SoundManager.playConquest();
         return true;
@@ -335,10 +341,11 @@ export function useGameState(online = null) {
         const newTurns = centerOwner === prev.faction ? prev.turns + 1 : 1;
 
         if (newTurns >= 3) {
-          const winner = players.find(p => p.faction === centerOwner);
+          const win = players.find(p => p.faction === centerOwner);
           setTimeout(() => {
             setPhase('GAME_OVER');
-            addLog(`👑 CONTROL DEL NÚCLEO: ${winner?.name.toUpperCase()} dominó el centro durante 3 de sus propios turnos. ¡VICTORIA!`, 'success');
+            if (win) setWinner({ faction: win.faction, name: win.name, reason: 'Control del NÚCLEO (3 turnos)' });
+            addLog(`👑 CONTROL DEL NÚCLEO: ${win?.name.toUpperCase()} dominó el centro durante 3 de sus propios turnos. ¡VICTORIA!`, 'success');
             SoundManager.playConquest();
           }, 100);
         } else if (newTurns === 2) {
@@ -1061,6 +1068,7 @@ export function useGameState(online = null) {
       consume();
       addLog(`👑 ${cp.name.toUpperCase()} juega VICTORIA DEL NÚCLEO y GANA la partida.`, 'success');
       SoundManager.playConquest();
+      setWinner({ faction: cp.faction, name: cp.name, reason: 'Carta Victoria del Núcleo 👑' });
       setPhase('GAME_OVER');
       return;
     }
@@ -1068,10 +1076,11 @@ export function useGameState(online = null) {
       consume();
       const score = (f) => countStrategicBases(f, boardState) * 1000 + getTotalTroops(f, boardState);
       const active = players.filter((p) => !p.eliminated);
-      let winner = active[0] || players[0];
-      active.forEach((p) => { if (score(p.faction) > score(winner.faction)) winner = p; });
-      addLog(`🏁 ${cp.name.toUpperCase()} juega FIN DE PARTIDA. Gana ${winner.name.toUpperCase()} (${countStrategicBases(winner.faction, boardState)} bases).`, 'success');
+      let win = active[0] || players[0];
+      active.forEach((p) => { if (score(p.faction) > score(win.faction)) win = p; });
+      addLog(`🏁 ${cp.name.toUpperCase()} juega FIN DE PARTIDA. Gana ${win.name.toUpperCase()} (${countStrategicBases(win.faction, boardState)} bases).`, 'success');
       SoundManager.playConquest();
+      setWinner({ faction: win.faction, name: win.name, reason: 'Carta Fin de Partida 🏁' });
       setPhase('GAME_OVER');
       return;
     }
@@ -1622,11 +1631,11 @@ export function useGameState(online = null) {
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
     surpriseState, siegeState, negotiationState, bombState, defenseState,
-    hands, alliances, nucleoData, boardSize, brutalCards,
+    hands, winner, alliances, nucleoData, boardSize, brutalCards,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
        surpriseState, siegeState, negotiationState, bombState, defenseState,
-       hands, alliances, nucleoData, boardSize, brutalCards]);
+       hands, winner, alliances, nucleoData, boardSize, brutalCards]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1647,6 +1656,7 @@ export function useGameState(online = null) {
     if (snap.bombState !== undefined) setBombState(snap.bombState);
     if (snap.defenseState !== undefined) setDefenseState(snap.defenseState);
     if (snap.hands !== undefined) setHands(snap.hands);
+    if (snap.winner !== undefined) setWinner(snap.winner);
     if (snap.alliances !== undefined) setAlliances(snap.alliances);
     if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
     // Board layout config must match so every client rebuilds the same graph.
@@ -1678,6 +1688,7 @@ export function useGameState(online = null) {
     bombState,
     defenseState,
     hands,
+    winner,
     shieldPurchasedThisTurn,
     brutalCards,
     boardSize,
