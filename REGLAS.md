@@ -192,6 +192,7 @@ Si la partida se creó con **cartas brutales**, el mazo incluye además (raras):
 
 - **💣 Bomba atómica:** eliges **cualquier base del tablero** y la **arrasas** — mueren todas sus tropas y escudos, y queda vacía (¡puedes borrar un HQ enemigo entero!).
 - **👑 Victoria del núcleo:** ¡**ganas la partida al instante**! Como si controlaras el NÚCLEO.
+- **🏁 Fin de partida:** la partida **termina en el acto** y gana **quien va líder**: el que controla **más bases** (a igualdad, más tropas).
 
 ---
 
@@ -240,7 +241,7 @@ La partida termina en cuanto un comandante cumple **cualquiera** de estas:
 | Bono de captura | HQ +10 · neutral +5 |
 | Cartas sorpresa (tropas) | +5, +3, +2, +1, −1, −2, −3 |
 | Modos de tablero | Grande (largo) / Pequeño ⚡ (rápido) |
-| Cartas brutales (opcional) | 💣 arrasa cualquier base · 👑 victoria directa |
+| Cartas brutales (opcional) | 💣 arrasa cualquier base · 👑 victoria directa · 🏁 fin de partida (gana el líder) |
 | Fortificar (fase tras reforzar) | 5 tropas de la base → 1 escudo (≥10 tropas totales, base con ≥6; máx. 1/turno, 3/base) |
 | Asedio (base con escudos) | dado 1→−1 · 2-3→−2 · 4-6→−3; si queda alguno, repelido |
 | Bloqueo al cruzar | el ocupante deja pasar o bloquea (combate); online 15 s → bloquear |

@@ -11,7 +11,8 @@ export function buildSurpriseDeck(brutal) {
   const deck = SURPRISE_CARDS.map((v) => ({ t: 'troops', v }));
   if (brutal) {
     deck.push({ t: 'bomb' }, { t: 'bomb' });   // 2 nukes
-    deck.push({ t: 'nucleo' });                 // 1 instant win (rare)
+    deck.push({ t: 'nucleo' });                 // 1 instant NÚCLEO win (rare)
+    deck.push({ t: 'endgame' });                // 1 sudden death: leader wins now (rare)
   }
   return deck;
 }
@@ -932,6 +933,21 @@ export function useGameState(online = null) {
       return;
     }
 
+    // 🏁 Sudden death: the game ends NOW; the player with most bases (tiebreak: troops) wins.
+    if (drawn.t === 'endgame') {
+      setSurpriseState(null);
+      const score = (f) => countStrategicBases(f, boardState) * 1000 + getTotalTroops(f, boardState);
+      const active = players.filter((p) => !p.eliminated);
+      let winner = active[0] || players[0];
+      active.forEach((p) => { if (score(p.faction) > score(winner.faction)) winner = p; });
+      const bases = countStrategicBases(winner.faction, boardState);
+      const troops = getTotalTroops(winner.faction, boardState);
+      addLog(`🏁 ¡FIN DE PARTIDA SÚBITO! Gana ${winner.name.toUpperCase()} (${bases} bases, ${troops} tropas).`, 'success');
+      SoundManager.playConquest();
+      setPhase('GAME_OVER');
+      return;
+    }
+
     // 💣 Atomic bomb: the drawer must pick a base to wipe.
     if (drawn.t === 'bomb') {
       setSurpriseState(null);
@@ -959,7 +975,7 @@ export function useGameState(online = null) {
     setSurpriseState(null);
     setPhase('MOVE');
     resolvePostMovement(newBoard);
-  }, [surpriseState, brutalCards, boardState, players, currentTurn, graph, addLog, resolvePostMovement]);
+  }, [surpriseState, brutalCards, boardState, players, currentTurn, graph, addLog, resolvePostMovement, countStrategicBases, getTotalTroops]);
 
   // --- ATOMIC BOMB: wipe the chosen base (any base on the board) then continue. ---
   const executeBomb = useCallback((targetNodeId) => {

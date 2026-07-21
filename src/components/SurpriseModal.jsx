@@ -8,6 +8,7 @@ function describe(card) {
   if (!card) return null;
   if (card.t === 'bomb') return { label: '💣 BOMBA ATÓMICA', sub: 'Elige una base para arrasar', bg: '#7f1d1d', glow: 'rgba(239,68,68,0.6)', anim: 'animate-wiggle' };
   if (card.t === 'nucleo') return { label: '👑 ¡VICTORIA!', sub: 'Control del NÚCLEO', bg: '#a16207', glow: 'rgba(245,208,0,0.7)', anim: 'animate-bounce' };
+  if (card.t === 'endgame') return { label: '🏁 FIN DE PARTIDA', sub: 'Gana quien va líder', bg: '#4338ca', glow: 'rgba(99,102,241,0.7)', anim: 'animate-bounce' };
   const v = card.v;
   return {
     label: v > 0 ? `+${v}` : `${v}`,
