@@ -12,9 +12,10 @@ import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw
 export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialView = 'choose', onSeatsChange, onBack, onLaunch }) {
   const [view, setView] = useState(initialJoinCode ? 'join' : initialView); // choose | create | join | waiting | mygames | reconnecting
   const [code, setCode] = useState(initialJoinCode);
-  // Remember the player's name across sessions (so friends don't re-type it and
-  // don't fall back to the generic "Invitado").
+  // Default the name to the saved profile nickname (falls back to the old
+  // bc_name key), so friends don't re-type it and don't land on "Invitado".
   const [name, setName] = useState(() => {
+    if (mp.profile?.nickname) return mp.profile.nickname;
     try { return localStorage.getItem('bc_name') || ''; } catch { return ''; }
   });
   const [copied, setCopied] = useState(false);
@@ -209,6 +210,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
               {seats.map((s, i) => (
                 <div key={i} className="flex items-center gap-3 bg-[#0d101a] border border-slate-900 rounded p-2">
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[s.faction]?.neon, flexShrink: 0 }} />
+                  {s.type === 'human' && s.userId && s.avatar && <span className="text-base leading-none shrink-0">{s.avatar}</span>}
                   <span className="font-tactical text-[11px] text-white flex-1 truncate">{s.name}</span>
                   <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${
                     s.type === 'bot' ? 'text-amber-400 bg-amber-950/30'
@@ -339,6 +341,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                 }`}
               >
                 <div style={{ width: 12, height: 12, borderRadius: '50%', background: FACTIONS[s.faction]?.neon, flexShrink: 0 }} />
+                {taken && s.avatar && <span className="text-base leading-none shrink-0">{s.avatar}</span>}
                 <span className="font-tactical text-sm text-white flex-1 truncate">{s.name}</span>
                 <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${taken ? 'text-gray-500 bg-slate-900' : 'text-green-400 bg-green-950/30'}`}>
                   {taken ? 'Ocupado' : 'Libre'}

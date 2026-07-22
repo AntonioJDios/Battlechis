@@ -136,3 +136,43 @@ $$;
 --        select cron.schedule('battlechis-cleanup', '0 4 * * *',
 --                             $$ select public.battlechis_cleanup(); $$);
 -- (Si no habilitas pg_cron, la app ya borra tus partidas terminadas al abrir "Mis partidas".)
+
+-- ── Perfiles de jugador (apodo + avatar + estadísticas), sin contraseña ──
+-- La identidad es el uid anónimo del dispositivo (auth.uid()).
+create table if not exists public.battlechis_profiles (
+  user_id      uuid primary key,
+  nickname     text not null default 'Comandante',
+  avatar       text not null default '🎖️',
+  games_played int  not null default 0,
+  games_won    int  not null default 0,
+  updated_at   timestamptz not null default now()
+);
+
+alter table public.battlechis_profiles enable row level security;
+
+-- Cualquiera autenticado puede LEER todos los perfiles (para el ranking y ver
+-- a los rivales); pero solo puedes crear/editar/borrar EL TUYO.
+drop policy if exists battlechis_profiles_read on public.battlechis_profiles;
+create policy battlechis_profiles_read
+  on public.battlechis_profiles for select
+  to authenticated
+  using (true);
+
+drop policy if exists battlechis_profiles_write on public.battlechis_profiles;
+create policy battlechis_profiles_write
+  on public.battlechis_profiles for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Registrar el resultado de una partida para el usuario que llama (suma 1 a
+-- jugadas, y 1 a ganadas si `won`). Atómico y respeta RLS (security invoker).
+create or replace function public.battlechis_record_result(won boolean)
+returns void language sql security invoker as $$
+  insert into public.battlechis_profiles (user_id, games_played, games_won)
+  values (auth.uid(), 1, case when won then 1 else 0 end)
+  on conflict (user_id) do update
+    set games_played = public.battlechis_profiles.games_played + 1,
+        games_won    = public.battlechis_profiles.games_won + case when won then 1 else 0 end,
+        updated_at   = now();
+$$;

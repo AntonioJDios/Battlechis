@@ -15,6 +15,8 @@ import BombModal from './components/BombModal';
 import HandPanel from './components/HandPanel';
 import DefenseModal from './components/DefenseModal';
 import Lobby from './components/Lobby';
+import ProfileModal from './components/ProfileModal';
+import RankingModal from './components/RankingModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi } from 'lucide-react';
@@ -107,6 +109,22 @@ export default function App() {
   const lastSyncedRef = React.useRef(null);
   const notifyRef = React.useRef({ turn: null, def: false, neg: false }); // push-notification dedupe
 
+  // ── Record the game result into my profile stats (online games, once each) ──
+  const recordedRef = React.useRef(false);
+  useEffect(() => {
+    if (phase !== 'GAME_OVER' || !onlineActive || recordedRef.current) return;
+    const gid = mp.game?.id;
+    if (!gid) return;
+    let done = [];
+    try { done = JSON.parse(localStorage.getItem('bc_recorded') || '[]'); } catch { /* ignore */ }
+    recordedRef.current = true;
+    if (done.includes(gid)) return; // already counted (survives reloads)
+    const won = Boolean(winner && myFactions.includes(winner.faction));
+    mp.recordResult(won);
+    try { localStorage.setItem('bc_recorded', JSON.stringify([...done, gid].slice(-100))); } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, onlineActive, winner]);
+
   // ── Road-crossing negotiation (defender modal / attacker resolution) ──
   const negDefender = negotiationState
     ? players.find((p) => p.faction === negotiationState.defenderFaction)
@@ -178,6 +196,10 @@ export default function App() {
   // Landing page: show "Jugar / Instalar" first; deep-link joins skip straight in.
   const [homeScreen, setHomeScreen] = useState(true);
   const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
+
+  // ── Profile / ranking ──
+  const [showProfile, setShowProfile] = useState(false);
+  const [showRanking, setShowRanking] = useState(false);
 
   // ── PWA install ──
   const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
@@ -407,15 +429,31 @@ export default function App() {
             </div>
           )}
 
+          {showProfile && (
+            <ProfileModal profile={mp.profile} onSave={mp.saveProfile} onClose={() => setShowProfile(false)} />
+          )}
+          {showRanking && (
+            <RankingModal fetchRanking={mp.fetchRanking} myUserId={mp.userId} onClose={() => setShowRanking(false)} />
+          )}
+
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="text-center py-3 animate-fade-in">
               <h1 className="font-tactical text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
                 BATTLECHIS
               </h1>
-              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-6">
+              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-4">
                 Risk + Parchís táctico
               </p>
+              {/* Profile chip — tap to edit nickname + avatar */}
+              <button
+                onClick={() => setShowProfile(true)}
+                className="mx-auto mb-5 flex items-center gap-2 px-4 py-2 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
+              >
+                <span className="text-xl leading-none">{mp.profile?.avatar || '🎖️'}</span>
+                <span className="font-tactical text-sm text-white">{mp.profile?.nickname || 'Elige tu perfil'}</span>
+                <Settings className="w-3.5 h-3.5 text-slate-500" />
+              </button>
               <div className="flex flex-col gap-3 max-w-xs mx-auto">
                 <button
                   onClick={() => setHomeScreen(false)}
@@ -429,6 +467,14 @@ export default function App() {
                     className="btn-tactical border-slate-500 text-slate-300 bg-slate-800/30 font-bold tracking-widest text-sm py-2.5 hover:bg-slate-700/40"
                   >
                     📂 MIS PARTIDAS
+                  </button>
+                )}
+                {mp.available && (
+                  <button
+                    onClick={() => setShowRanking(true)}
+                    className="btn-tactical border-yellow-500/50 text-yellow-300 bg-yellow-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-yellow-900/30"
+                  >
+                    🏆 RANKING
                   </button>
                 )}
                 {mp.available && mp.pushSupported && (

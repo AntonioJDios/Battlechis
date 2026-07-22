@@ -3,6 +3,20 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const TABLE = 'battlechis_games';
 const PUSH_TABLE = 'battlechis_push';
+const PROFILE_TABLE = 'battlechis_profiles';
+const DEFAULT_AVATAR = '🎖️';
+
+// The player's profile lives on the device (localStorage) for instant prefill,
+// and is mirrored to battlechis_profiles so rivals + the ranking can see it.
+function loadLocalProfile() {
+  try {
+    const raw = localStorage.getItem('bc_profile');
+    if (raw) { const p = JSON.parse(raw); return { nickname: p.nickname || '', avatar: p.avatar || DEFAULT_AVATAR }; }
+  } catch { /* ignore */ }
+  let nickname = '';
+  try { nickname = localStorage.getItem('bc_name') || ''; } catch { /* ignore */ } // migrate old key
+  return { nickname, avatar: DEFAULT_AVATAR };
+}
 
 // VAPID public key (safe to expose). Set VITE_VAPID_PUBLIC_KEY (or NEXT_PUBLIC_…).
 const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -40,6 +54,9 @@ export function useMultiplayer() {
   const [game, setGame] = useState(null); // { id, code, status, member_ids, state, host_id }
   const [error, setError] = useState(null);
   const [connecting, setConnecting] = useState(false);
+  const [profile, setProfile] = useState(loadLocalProfile);
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
 
   const channelRef = useRef(null);
   const onRemoteRef = useRef(null);   // callback(state, meta) for incoming updates
@@ -62,8 +79,48 @@ export function useMultiplayer() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    ensureAuth().catch((e) => setError(e.message));
+    ensureAuth().then(async (uid) => {
+      // Pull the stored profile so this device shows the latest nickname/avatar.
+      try {
+        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar').eq('user_id', uid).maybeSingle();
+        if (data) setProfile((p) => ({ nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar }));
+      } catch { /* ignore */ }
+    }).catch((e) => setError(e.message));
   }, [ensureAuth]);
+
+  // ── Save this device's profile (nickname + avatar): local + DB ──
+  const saveProfile = useCallback(async ({ nickname, avatar }) => {
+    const next = { nickname: (nickname ?? '').trim() || 'Comandante', avatar: avatar || DEFAULT_AVATAR };
+    setProfile(next);
+    try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+    if (!isSupabaseConfigured) return { ok: true };
+    try {
+      const uid = await ensureAuth();
+      const { error: upErr } = await supabase.from(PROFILE_TABLE)
+        .upsert({ user_id: uid, nickname: next.nickname, avatar: next.avatar, updated_at: new Date().toISOString() });
+      if (upErr) return { ok: false, msg: upErr.message };
+    } catch (e) { return { ok: false, msg: e.message }; }
+    return { ok: true };
+  }, [ensureAuth]);
+
+  // ── Record a finished game for the caller (1 played, +1 won if `won`) ──
+  const recordResult = useCallback(async (won) => {
+    if (!isSupabaseConfigured) return;
+    try { await ensureAuth(); await supabase.rpc('battlechis_record_result', { won: !!won }); }
+    catch { /* best-effort */ }
+  }, [ensureAuth]);
+
+  // ── Ranking: all profiles, most wins first ──
+  const fetchRanking = useCallback(async () => {
+    if (!isSupabaseConfigured) return [];
+    const { data, error: e } = await supabase.from(PROFILE_TABLE)
+      .select('user_id, nickname, avatar, games_played, games_won')
+      .order('games_won', { ascending: false })
+      .order('games_played', { ascending: true })
+      .limit(50);
+    if (e) throw e;
+    return data || [];
+  }, []);
 
   // Apply a freshly-read row (from realtime OR polling), de-duplicated by updated_at.
   const applyRow = useCallback((row) => {
@@ -111,10 +168,12 @@ export function useMultiplayer() {
       const uid = await ensureAuth();
       const code = makeCode();
       // Assign the host to the first human seat.
-      const filledSeats = seats.map((s, i) => {
-        const firstHuman = seats.findIndex((x) => x.type === 'human');
-        return i === firstHuman ? { ...s, userId: uid } : { ...s, userId: null };
-      });
+      const firstHuman = seats.findIndex((x) => x.type === 'human');
+      const filledSeats = seats.map((s, i) => (
+        i === firstHuman
+          ? { ...s, userId: uid, name: profileRef.current?.nickname || s.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR }
+          : { ...s, userId: null }
+      ));
       const state = { ...initialState, seats: filledSeats };
       const { data, error: insErr } = await supabase
         .from(TABLE)
@@ -252,7 +311,7 @@ export function useMultiplayer() {
       const seat = seats[seatIndex];
       if (!seat || seat.type !== 'human') throw new Error('Ese puesto no es válido.');
       if (seat.userId && seat.userId !== uid) throw new Error('Ese comandante ya está ocupado, elige otro.');
-      seats[seatIndex] = { ...seat, userId: uid, name: playerName || seat.name };
+      seats[seatIndex] = { ...seat, userId: uid, name: playerName || seat.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR };
 
       const memberIds = Array.from(new Set([...(row.member_ids ?? []), uid]));
       const { data, error: updErr } = await supabase
@@ -323,6 +382,10 @@ export function useMultiplayer() {
     pushSupported,
     pushEnabled,
     notify,
+    profile,
+    saveProfile,
+    recordResult,
+    fetchRanking,
     refreshGame,
     pushState,
     setOnRemoteState,
