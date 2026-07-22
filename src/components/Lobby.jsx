@@ -214,18 +214,38 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
             </div>
           </div>
 
-          {isHost ? (
-            <button
-              onClick={() => onLaunch(game)}
-              className="btn-tactical border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20 py-3 text-sm font-black tracking-widest"
-            >
-              ▶ EMPEZAR PARTIDA
-            </button>
-          ) : (
-            <div className="text-center font-mono text-[11px] text-cyan-400 animate-pulse py-2">
-              Esperando a que el anfitrión empiece la partida…
-            </div>
-          )}
+          {(() => {
+            const humanSeats = seats.filter((s) => s.type === 'human');
+            const freeSeats = humanSeats.filter((s) => !s.userId).length;
+            const allFilled = humanSeats.length > 0 && freeSeats === 0;
+            if (!isHost) {
+              return (
+                <div className="text-center font-mono text-[11px] text-cyan-400 animate-pulse py-2">
+                  Esperando a que el anfitrión empiece la partida…
+                </div>
+              );
+            }
+            return (
+              <>
+                <button
+                  onClick={() => onLaunch(game)}
+                  disabled={!allFilled}
+                  className={`btn-tactical py-3 text-sm font-black tracking-widest ${
+                    allFilled
+                      ? 'border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20'
+                      : 'border-slate-700 text-slate-500 opacity-50 cursor-not-allowed'
+                  }`}
+                >
+                  ▶ EMPEZAR PARTIDA
+                </button>
+                {!allFilled && (
+                  <p className="font-mono text-[10px] text-amber-400 text-center">
+                    Faltan {freeSeats} jugador{freeSeats !== 1 ? 'es' : ''} por unirse (los puestos 👤 deben estar todos ocupados).
+                  </p>
+                )}
+              </>
+            );
+          })()}
           {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
         </div>
       </Shell>
