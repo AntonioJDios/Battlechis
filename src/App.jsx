@@ -402,8 +402,8 @@ export default function App() {
   // Render Setup Lobby Screen
   if (!gameStarted) {
     return (
-      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px', zIndex: 10 }}>
-        <div className="w-full max-w-lg mx-auto border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
+      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px', zIndex: 10 }}>
+        <div className="w-full max-w-lg my-auto border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
 
           {/* Top corner design markers */}
           <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-cyan-400"></div>
@@ -438,23 +438,23 @@ export default function App() {
 
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
-            <div className="text-center py-3 animate-fade-in">
+            <div className="flex flex-col items-center text-center py-2 animate-fade-in">
               <h1 className="font-tactical text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
                 BATTLECHIS
               </h1>
-              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-4">
+              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-3">
                 Risk + Parchís táctico
               </p>
               {/* Profile chip — tap to edit nickname + avatar */}
               <button
                 onClick={() => setShowProfile(true)}
-                className="mx-auto mb-5 flex items-center gap-2 px-4 py-2 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
+                className="mb-4 flex items-center gap-2 px-4 py-2 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
               >
                 <span className="text-xl leading-none">{mp.profile?.avatar || '🎖️'}</span>
                 <span className="font-tactical text-sm text-white">{mp.profile?.nickname || 'Elige tu perfil'}</span>
                 <Settings className="w-3.5 h-3.5 text-slate-500" />
               </button>
-              <div className="flex flex-col gap-3 max-w-xs mx-auto">
+              <div className="flex flex-col gap-2.5 w-full max-w-xs">
                 <button
                   onClick={() => setHomeScreen(false)}
                   className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-3 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
