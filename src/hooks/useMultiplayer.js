@@ -190,6 +190,18 @@ export function useMultiplayer() {
 
   // ── Enable Web Push notifications on this device ──
   const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const [pushEnabled, setPushEnabled] = useState(false);
+
+  // On load, reflect whether this device is already subscribed (so the button
+  // can show "activated" instead of always inviting you to activate again).
+  useEffect(() => {
+    if (!pushSupported || Notification.permission !== 'granted') return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => { if (sub) setPushEnabled(true); })
+      .catch(() => {});
+  }, [pushSupported]);
+
   const enablePush = useCallback(async () => {
     if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado.' };
     if (!pushSupported) return { ok: false, msg: 'Tu navegador no soporta notificaciones push.' };
@@ -210,6 +222,7 @@ export function useMultiplayer() {
       const { error: upErr } = await supabase.from(PUSH_TABLE)
         .upsert({ user_id: uid, subscription: sub.toJSON(), updated_at: new Date().toISOString() });
       if (upErr) return { ok: false, msg: upErr.message };
+      setPushEnabled(true);
       return { ok: true };
     } catch (e) {
       return { ok: false, msg: e.message };
@@ -308,6 +321,7 @@ export function useMultiplayer() {
     deleteGame,
     enablePush,
     pushSupported,
+    pushEnabled,
     notify,
     refreshGame,
     pushState,

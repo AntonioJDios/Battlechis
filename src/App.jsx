@@ -435,11 +435,11 @@ export default function App() {
                   <button
                     onClick={async () => {
                       const r = await mp.enablePush();
-                      alert(r.ok ? '🔔 Avisos activados: te notificaremos cuando sea tu turno o te ataquen, aunque tengas la app cerrada.' : `No se pudieron activar: ${r.msg}`);
+                      alert(r.ok ? '🔔 Avisos activados: te avisaremos cuando sea tu turno o te ataquen, aunque tengas la app cerrada.' : `No se pudieron activar: ${r.msg}`);
                     }}
-                    className="btn-tactical border-amber-500/60 text-amber-300 bg-amber-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-amber-900/30"
+                    className={`btn-tactical font-bold tracking-widest text-sm py-2.5 ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/20 hover:bg-green-900/30' : 'border-amber-500/60 text-amber-300 bg-amber-950/20 hover:bg-amber-900/30'}`}
                   >
-                    🔔 ACTIVAR AVISOS
+                    {mp.pushEnabled ? '✅ AVISOS ACTIVADOS' : '🔔 ACTIVAR AVISOS'}
                   </button>
                 )}
                 {canShowInstall ? (
@@ -766,6 +766,20 @@ export default function App() {
           >
             📋
           </button>
+
+          {/* Push notifications toggle */}
+          {mp.available && mp.pushSupported && (
+            <button
+              onClick={async () => {
+                const r = await mp.enablePush();
+                alert(r.ok ? '🔔 Avisos activados: te avisaremos cuando sea tu turno o te ataquen, aunque cierres la app.' : `No se pudieron activar: ${r.msg}`);
+              }}
+              className={`p-2 border rounded transition-all text-xs font-tactical font-bold ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/20' : 'border-slate-800 text-slate-500 hover:text-white hover:border-slate-700'}`}
+              title={mp.pushEnabled ? 'Avisos activados' : 'Activar avisos push'}
+            >
+              {mp.pushEnabled ? '🔔' : '🔕'}
+            </button>
+          )}
 
           {/* Mute button */}
           <button
