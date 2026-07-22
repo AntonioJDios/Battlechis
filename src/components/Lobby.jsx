@@ -12,7 +12,11 @@ import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw
 export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialView = 'choose', onSeatsChange, onBack, onLaunch }) {
   const [view, setView] = useState(initialJoinCode ? 'join' : initialView); // choose | create | join | waiting | mygames | reconnecting
   const [code, setCode] = useState(initialJoinCode);
-  const [name, setName] = useState('');
+  // Remember the player's name across sessions (so friends don't re-type it and
+  // don't fall back to the generic "Invitado").
+  const [name, setName] = useState(() => {
+    try { return localStorage.getItem('bc_name') || ''; } catch { return ''; }
+  });
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState(null);
@@ -101,7 +105,10 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   const doClaim = async (seatIndex) => {
     setBusy(true); setLocalError(null);
     try {
-      await mp.claimSeat(foundGame.id, seatIndex, name || 'Invitado');
+      const seat = (foundGame.state?.seats ?? [])[seatIndex];
+      const finalName = name.trim() || seat?.name || 'Invitado';
+      try { if (name.trim()) localStorage.setItem('bc_name', name.trim()); } catch { /* ignore */ }
+      await mp.claimSeat(foundGame.id, seatIndex, finalName);
       setView('waiting');
     } catch (e) {
       setLocalError(e.message);
@@ -310,13 +317,14 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     return (
       <Shell onBack={() => { setView('join'); setFoundGame(null); }} title="Elige tu comandante">
         <div className="flex flex-col gap-2">
+          <label className="font-mono text-[10px] text-cyan-300 uppercase tracking-wider">Tu nombre</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Tu nombre (opcional)"
-            className="bg-[#121625] border border-slate-800 text-gray-300 font-mono text-sm p-2 rounded focus:outline-none focus:border-cyan-500 mb-1"
+            placeholder="Escribe tu nombre"
+            className="bg-[#121625] border border-cyan-500/40 text-white font-mono text-sm p-2.5 rounded focus:outline-none focus:border-cyan-400 mb-1"
           />
-          <p className="font-mono text-[10px] text-gray-500 mb-1">Selecciona el puesto que vas a controlar:</p>
+          <p className="font-mono text-[10px] text-gray-500 mb-1">Y selecciona el puesto que vas a controlar:</p>
           {humanSeats.map((s) => {
             const taken = Boolean(s.userId);
             return (
