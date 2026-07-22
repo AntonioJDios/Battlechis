@@ -216,6 +216,13 @@ export function useMultiplayer() {
     }
   }, [pushSupported, ensureAuth]);
 
+  // ── Fire a push to a specific user via the edge function (no webhook needed) ──
+  const notify = useCallback(async (payload) => {
+    if (!isSupabaseConfigured || !payload?.userId) return;
+    try { await supabase.functions.invoke('notify', { body: { notify: payload } }); }
+    catch { /* best-effort */ }
+  }, []);
+
   // ── Claim a specific seat in a game (the player picks which commander) ──
   const claimSeat = useCallback(async (gameId, seatIndex, playerName) => {
     setConnecting(true);
@@ -301,6 +308,7 @@ export function useMultiplayer() {
     deleteGame,
     enablePush,
     pushSupported,
+    notify,
     refreshGame,
     pushState,
     setOnRemoteState,

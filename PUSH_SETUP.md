@@ -25,32 +25,28 @@ Te da dos claves: **Public Key** y **Private Key**. Guárdalas.
 ## 3) Crear la tabla de suscripciones
 - Supabase → **SQL Editor** → re-ejecuta **`supabase/schema.sql`** (añade `battlechis_push` + `replica identity full`).
 
-## 4) Desplegar la Edge Function `notify`
-Con el [CLI de Supabase](https://supabase.com/docs/guides/cli):
+## 4) Desplegar la Edge Function `notify`  (⚠️ SIN webhook — el juego la llama solo)
 
+**Opción A (Dashboard, sin CLI, recomendada):**
+- Supabase → **Edge Functions** → **Deploy a new function** → nómbrala **`notify`**.
+- Pega el contenido de `supabase/functions/notify/index.ts` → **Deploy**.
+- En **Edge Functions → Secrets** (o Project Settings → Edge Functions) añade:
+  - `VAPID_PUBLIC_KEY` = *(Public Key)*
+  - `VAPID_PRIVATE_KEY` = *(Private Key)* ← privada, SOLO aquí
+  - `VAPID_SUBJECT` = `mailto:tucorreo@ejemplo.com`
+  - `APP_URL` = `https://battlechis.vercel.app`
+
+**Opción B (CLI):**
 ```bash
-supabase login
-supabase link --project-ref ouvnsnfldwnyqqcebpbp
-
-# Secretos de la función (la PRIVADA solo aquí, nunca en el frontend):
-supabase secrets set \
-  VAPID_PUBLIC_KEY="<Public Key>" \
-  VAPID_PRIVATE_KEY="<Private Key>" \
-  VAPID_SUBJECT="mailto:tucorreo@ejemplo.com" \
-  APP_URL="https://battlechis.vercel.app"
-
-supabase functions deploy notify --no-verify-jwt
+npx supabase login
+npx supabase link --project-ref ouvnsnfldwnyqqcebpbp
+npx supabase secrets set VAPID_PUBLIC_KEY="<pub>" VAPID_PRIVATE_KEY="<priv>" VAPID_SUBJECT="mailto:tucorreo" APP_URL="https://battlechis.vercel.app"
+npx supabase functions deploy notify
 ```
 
-## 5) Crear el Database Webhook
-- Supabase → **Database → Webhooks → Create a new hook**:
-  - **Table:** `battlechis_games`
-  - **Events:** `Update`
-  - **Type:** *Supabase Edge Functions* → selecciona la función **`notify`**
-  - Guardar.
-
-Esto hará que, en cada actualización de una partida, la función mire si alguien
-ha recibido el turno o le atacan y le mande el aviso.
+## 5) (Ya NO hace falta webhook)
+El propio juego llama a la función `notify` justo después de cada jugada (cuando
+cambia el turno o hay un ataque). No tienes que crear ningún Database Webhook.
 
 ---
 

@@ -45,6 +45,16 @@ async function sendTo(userId: string, payload: Record<string, unknown>) {
 Deno.serve(async (req) => {
   try {
     const body = await req.json();
+
+    // Direct invoke from the game client (no webhook needed):
+    //   { notify: { userId, title, body, url } }
+    if (body?.notify?.userId) {
+      const n = body.notify;
+      await sendTo(n.userId, { title: n.title || 'BattleChis', body: n.body || '', url: n.url || APP_URL, tag: 'battlechis' });
+      return new Response(JSON.stringify({ sent: 1 }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Otherwise: Database Webhook payload (record / old_record).
     const nw = body.record?.state ?? {};
     const old = body.old_record?.state ?? {};
     const seats = nw.seats ?? [];

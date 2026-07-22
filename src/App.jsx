@@ -105,6 +105,7 @@ export default function App() {
     : (myFactions.includes(activeFaction) || (iAmHost && players[currentTurn]?.isBot));
 
   const lastSyncedRef = React.useRef(null);
+  const notifyRef = React.useRef({ turn: null, def: false, neg: false }); // push-notification dedupe
 
   // ── Road-crossing negotiation (defender modal / attacker resolution) ──
   const negDefender = negotiationState
@@ -267,9 +268,34 @@ export default function App() {
       lastSyncedRef.current = key;
       const status = snap.phase === 'GAME_OVER' ? 'finished' : 'playing';
       mp.pushState(mp.game.id, { ...snap, seats }, status);
+
+      // Push notifications (only the acting client runs this). Best-effort.
+      try {
+        const url = `${window.location.origin}/?join=${mp.game.code}`;
+        const seatUid = (f) => (seats || []).find((s) => s.faction === f && s.type === 'human' && s.userId)?.userId;
+        // Turn handed to a different human → notify them.
+        if (snap.currentTurn !== notifyRef.current.turn) {
+          notifyRef.current.turn = snap.currentTurn;
+          const cur = snap.players?.[snap.currentTurn];
+          const uid = cur && !cur.isBot ? seatUid(cur.faction) : null;
+          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🎯 ¡Es tu turno!', body: `Te toca en BattleChis (${cur.name}).`, url });
+        }
+        // Attacked → super-defense prompt.
+        if (snap.defenseState && !notifyRef.current.def) {
+          notifyRef.current.def = true;
+          const uid = seatUid(snap.defenseState.defenderFaction);
+          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🛡️ ¡Te atacan!', body: 'Decide si usas tu Super Defensa.', url });
+        } else if (!snap.defenseState) { notifyRef.current.def = false; }
+        // Road-crossing negotiation.
+        if (snap.negotiationState && !notifyRef.current.neg) {
+          notifyRef.current.neg = true;
+          const uid = seatUid(snap.negotiationState.defenderFaction);
+          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🚧 Cruce en tu territorio', body: '¿Dejas pasar o bloqueas?', url });
+        } else if (!snap.negotiationState) { notifyRef.current.neg = false; }
+      } catch { /* ignore */ }
     }, 250);
     return () => clearTimeout(t);
-  }, [onlineActive, mp.game, mp.pushState, seats, getSnapshot]);
+  }, [onlineActive, mp, seats, getSnapshot]);
 
   // Guard modal/action callbacks so spectators (not their turn) can't mutate.
   const guardAuth = (fn) => (...args) => {
