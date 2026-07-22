@@ -405,6 +405,17 @@ export default function App() {
                     📂 MIS PARTIDAS
                   </button>
                 )}
+                {mp.available && mp.pushSupported && (
+                  <button
+                    onClick={async () => {
+                      const r = await mp.enablePush();
+                      alert(r.ok ? '🔔 Avisos activados: te notificaremos cuando sea tu turno o te ataquen, aunque tengas la app cerrada.' : `No se pudieron activar: ${r.msg}`);
+                    }}
+                    className="btn-tactical border-amber-500/60 text-amber-300 bg-amber-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-amber-900/30"
+                  >
+                    🔔 ACTIVAR AVISOS
+                  </button>
+                )}
                 {canShowInstall ? (
                   <button
                     onClick={handleInstall}

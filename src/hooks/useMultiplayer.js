@@ -2,6 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const TABLE = 'battlechis_games';
+const PUSH_TABLE = 'battlechis_push';
+
+// VAPID public key (safe to expose). Set VITE_VAPID_PUBLIC_KEY (or NEXT_PUBLIC_…).
+const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY || import.meta.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
 
 // Short, human-friendly invite code (no ambiguous chars like 0/O/1/I).
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -175,6 +188,34 @@ export function useMultiplayer() {
     return true;
   }, []);
 
+  // ── Enable Web Push notifications on this device ──
+  const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const enablePush = useCallback(async () => {
+    if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado.' };
+    if (!pushSupported) return { ok: false, msg: 'Tu navegador no soporta notificaciones push.' };
+    if (!VAPID_PUBLIC) return { ok: false, msg: 'Falta la clave pública VAPID (VITE_VAPID_PUBLIC_KEY).' };
+    if (location.protocol !== 'https:') return { ok: false, msg: 'Las notificaciones necesitan HTTPS (usa la web publicada).' };
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return { ok: false, msg: 'Permiso de notificaciones denegado.' };
+      const uid = await ensureAuth();
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+        });
+      }
+      const { error: upErr } = await supabase.from(PUSH_TABLE)
+        .upsert({ user_id: uid, subscription: sub.toJSON(), updated_at: new Date().toISOString() });
+      if (upErr) return { ok: false, msg: upErr.message };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, msg: e.message };
+    }
+  }, [pushSupported, ensureAuth]);
+
   // ── Claim a specific seat in a game (the player picks which commander) ──
   const claimSeat = useCallback(async (gameId, seatIndex, playerName) => {
     setConnecting(true);
@@ -258,6 +299,8 @@ export function useMultiplayer() {
     reconnect,
     listMyGames,
     deleteGame,
+    enablePush,
+    pushSupported,
     refreshGame,
     pushState,
     setOnRemoteState,

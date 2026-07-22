@@ -31,6 +31,10 @@ alter table public.battlechis_games
 create index if not exists battlechis_games_code_idx
   on public.battlechis_games (code);
 
+-- Necesario para que los webhooks reciban el estado ANTERIOR completo (old_record),
+-- así la Edge Function puede detectar el cambio de turno.
+alter table public.battlechis_games replica identity full;
+
 -- ── updated_at automático en cada UPDATE ──
 create or replace function public.battlechis_touch_updated_at()
 returns trigger language plpgsql as $$
@@ -98,6 +102,24 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+-- ── Suscripciones de notificaciones push (Web Push), una por dispositivo/usuario ──
+create table if not exists public.battlechis_push (
+  user_id      uuid primary key,
+  subscription jsonb not null,          -- PushSubscription.toJSON()
+  updated_at   timestamptz not null default now()
+);
+
+alter table public.battlechis_push enable row level security;
+
+-- Cada usuario gestiona (crea/actualiza/borra/lee) SOLO su propia suscripción.
+drop policy if exists battlechis_push_all on public.battlechis_push;
+create policy battlechis_push_all
+  on public.battlechis_push for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+-- (La Edge Function lee todas las filas con la service_role, que ignora RLS.)
 
 -- ── Limpieza de partidas viejas (para que la tabla no crezca sin fin) ──
 -- Borra partidas terminadas (>1 día) y partidas abandonadas sin actividad (>7 días).
