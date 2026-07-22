@@ -155,6 +155,9 @@ export function useMultiplayer() {
   // ── List this device's unfinished games (waiting/playing) to resume or delete ──
   const listMyGames = useCallback(async () => {
     const uid = await ensureAuth();
+    // Best-effort cleanup: drop this player's finished games so they don't pile up
+    // (works even without the pg_cron job). Fire-and-forget.
+    supabase.from(TABLE).delete().contains('member_ids', [uid]).eq('status', 'finished').then(() => {}, () => {});
     const { data, error: selErr } = await supabase
       .from(TABLE)
       .select('*')

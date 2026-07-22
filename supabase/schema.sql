@@ -98,3 +98,19 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+-- ── Limpieza de partidas viejas (para que la tabla no crezca sin fin) ──
+-- Borra partidas terminadas (>1 día) y partidas abandonadas sin actividad (>7 días).
+create or replace function public.battlechis_cleanup()
+returns void language sql security definer as $$
+  delete from public.battlechis_games
+  where (status = 'finished' and updated_at < now() - interval '1 day')
+     or (updated_at < now() - interval '7 days');
+$$;
+
+-- Limpieza AUTOMÁTICA diaria (requiere la extensión pg_cron):
+--   1) Dashboard → Database → Extensions → habilita "pg_cron".
+--   2) Ejecuta UNA vez:
+--        select cron.schedule('battlechis-cleanup', '0 4 * * *',
+--                             $$ select public.battlechis_cleanup(); $$);
+-- (Si no habilitas pg_cron, la app ya borra tus partidas terminadas al abrir "Mis partidas".)
