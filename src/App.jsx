@@ -472,6 +472,9 @@ export default function App() {
               setPassword={mp.setPassword}
               claimProfile={mp.claimProfile}
               onLogout={async () => { await mp.logout(); setOnboarded(false); }}
+              pushSupported={mp.pushSupported}
+              pushEnabled={mp.pushEnabled}
+              enablePush={mp.enablePush}
               onClose={() => { setShowProfile(false); setOnboarded(true); }}
             />
           )}
@@ -500,32 +503,18 @@ export default function App() {
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="flex flex-col items-center text-center py-1 animate-fade-in">
-              {/* Top-right corner: notifications bell + profile */}
+              {/* Top-right corner: settings (profile + notifications inside) */}
               {mp.available && (
-                <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 40 }} className="flex items-center gap-2">
-                  {mp.pushSupported && (
-                    <button
-                      onClick={async () => {
-                        if (mp.pushEnabled) { alert('🔔 Los avisos ya están activados en este dispositivo.'); return; }
-                        const r = await mp.enablePush();
-                        alert(r.ok ? '🔔 Avisos activados: te avisaremos de tu turno, ataques e invitaciones aunque cierres la app.' : `No se pudieron activar: ${r.msg}`);
-                      }}
-                      title={mp.pushEnabled ? 'Avisos activados' : 'Activar avisos'}
-                      className={`p-2 rounded-full border transition-all ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/40' : 'border-slate-700 text-slate-400 bg-[#0d101a]/80 hover:border-amber-500/60 hover:text-amber-300'}`}
-                    >
-                      {mp.pushEnabled ? '🔔' : '🔕'}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setShowProfile(true)}
-                    title="Tu perfil"
-                    className="flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
-                    style={{ maxWidth: '48vw' }}
-                  >
-                    <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
-                    <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Perfil'}</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowProfile(true)}
+                  title="Ajustes"
+                  style={{ position: 'fixed', top: 8, right: 8, zIndex: 40, maxWidth: '55vw' }}
+                  className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-slate-700 bg-[#0d101a]/90 hover:border-cyan-500/50 transition-all"
+                >
+                  <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
+                  <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Ajustes'}</span>
+                  <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+                </button>
               )}
               {inAppBrowser && !dismissInApp && (
                 <div className="w-full max-w-sm mb-3 rounded-lg border border-amber-500/50 bg-amber-950/30 px-3 py-2 text-left">

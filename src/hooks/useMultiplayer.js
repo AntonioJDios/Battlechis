@@ -526,9 +526,18 @@ export function useMultiplayer() {
     if (location.protocol !== 'https:') return { ok: false, msg: 'Las notificaciones necesitan HTTPS (usa la web publicada).' };
     try {
       const perm = await Notification.requestPermission();
-      if (perm !== 'granted') return { ok: false, msg: 'Permiso de notificaciones denegado.' };
+      if (perm !== 'granted') return { ok: false, msg: 'Permiso de notificaciones denegado. Actívalo en los ajustes del navegador.' };
       const uid = await ensureAuth();
-      const reg = await navigator.serviceWorker.ready;
+      // serviceWorker.ready can hang forever if no SW is active → guard with a timeout.
+      let reg;
+      try {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, rej) => setTimeout(() => rej(new Error('SW_TIMEOUT')), 6000)),
+        ]);
+      } catch {
+        return { ok: false, msg: 'No hay service worker activo. Recarga la app (Ctrl+F5 / reabrir) e inténtalo otra vez.' };
+      }
       let sub = await reg.pushManager.getSubscription();
       if (!sub) {
         sub = await reg.pushManager.subscribe({

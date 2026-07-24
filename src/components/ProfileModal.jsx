@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { UserRound, Check, X, Loader2, LogIn } from 'lucide-react';
+import { Settings, Check, X, Loader2, LogIn } from 'lucide-react';
 
-// Identity without email: create a profile (unique name + password + avatar),
-// or log in with name + password to use your profile on this device.
+// Settings: identity without email (create a profile with a unique name +
+// password + avatar, or log in with name + password) plus notifications.
 const AVATARS = ['🎖️','⭐','🔥','💀','🐉','🦅','🐺','🦁','🐻','🦊','👑','⚔️','🛡️','🚀','⚡','🎯','🐢','🦈','🤖','👽','🐙','🦖'];
 
-export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, onClose }) {
+export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, pushSupported, pushEnabled, enablePush, onClose }) {
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState(null);
   const hasProfile = !!profile?.nickname;
   const [mode, setMode] = useState('edit'); // 'edit' (create/edit) | 'login'
 
@@ -78,9 +80,9 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
         style={{ width: 'min(380px, 92vw)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, boxShadow: '0 0 40px rgba(0,240,255,0.2), 0 8px 32px rgba(0,0,0,0.7)' }}
       >
         <div style={{ background: 'rgba(5,40,60,0.9)', padding: '8px 12px', borderBottom: '1px solid rgba(0,240,255,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <UserRound className="w-4 h-4 text-cyan-400" />
+          <Settings className="w-4 h-4 text-cyan-400" />
           <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">
-            {mode === 'edit' ? (hasProfile ? 'Tu perfil' : 'Crea tu perfil') : 'Entrar con tu perfil'}
+            {mode === 'edit' ? (hasProfile ? 'Ajustes' : 'Crea tu perfil') : 'Entrar con tu perfil'}
           </span>
           <button onClick={tryClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
@@ -128,6 +130,31 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
               />
               <p className="font-mono text-[9px] text-gray-600 mt-1">Sin correo. Con tu nombre + contraseña entras en cualquier dispositivo.</p>
             </div>
+
+            {/* Notifications */}
+            {pushSupported && (
+              <div className="border-t border-slate-800 pt-3">
+                <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Notificaciones</label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (pushEnabled || pushBusy) return;
+                    setPushBusy(true); setPushMsg(null);
+                    const r = await enablePush();
+                    setPushBusy(false);
+                    setPushMsg(r.ok ? { ok: true, text: '✓ Activadas' } : { ok: false, text: r.msg });
+                  }}
+                  className="flex items-center gap-2 mt-1 w-full text-left"
+                >
+                  <span className={`w-5 h-5 rounded border flex items-center justify-center text-[12px] shrink-0 ${pushEnabled ? 'bg-green-600 border-green-500 text-white' : 'border-slate-600 text-transparent'}`}>
+                    {pushBusy ? <Loader2 className="w-3 h-3 animate-spin text-cyan-400" /> : '✓'}
+                  </span>
+                  <span className="font-mono text-[11px] text-white">Activar notificaciones</span>
+                </button>
+                <p className="font-mono text-[9px] text-gray-600 mt-1">Avisos de tu turno, ataques e invitaciones aunque cierres la app.</p>
+                {pushMsg && <p className={`font-mono text-[9px] mt-1 ${pushMsg.ok ? 'text-green-400' : 'text-red-400'}`}>{pushMsg.text}</p>}
+              </div>
+            )}
 
             {err && <p className="font-mono text-[10px] text-red-400">{err}</p>}
 
