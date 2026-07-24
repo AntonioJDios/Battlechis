@@ -417,6 +417,18 @@ export function useMultiplayer() {
       if (seat.userId && seat.userId !== uid) throw new Error('Ese comandante ya está ocupado, elige otro.');
       seats[seatIndex] = { ...seat, userId: uid, name: playerName || seat.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR };
 
+      // Adopt the join name as this player's profile nickname if they don't have
+      // a real one yet — so casual players (who never open the profile editor)
+      // still show a proper name in the ranking / friends list.
+      const pname = (playerName || '').trim();
+      const curNick = (profileRef.current?.nickname || '').trim();
+      if (pname && pname !== 'Invitado' && (!curNick || curNick === 'Comandante')) {
+        const next = { ...profileRef.current, nickname: pname };
+        setProfile(next);
+        try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+        supabase.from(PROFILE_TABLE).upsert({ user_id: uid, nickname: pname, avatar: next.avatar || DEFAULT_AVATAR }).then(() => {}, () => {});
+      }
+
       const memberIds = Array.from(new Set([...(row.member_ids ?? []), uid]));
       const { data, error: updErr } = await supabase
         .from(TABLE)
