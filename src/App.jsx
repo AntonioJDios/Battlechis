@@ -209,6 +209,11 @@ export default function App() {
   const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = typeof window !== 'undefined' &&
     (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  // In-app browsers (WhatsApp/Instagram/Facebook/Android WebView) have isolated
+  // storage → a different anonymous identity → a stray profile. Warn about it.
+  const inAppBrowser = typeof navigator !== 'undefined' && !isStandalone &&
+    (/WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Line\/|Messenger|; ?wv\)/i.test(navigator.userAgent || ''));
+  const [dismissInApp, setDismissInApp] = useState(false);
   useEffect(() => {
     const onBIP = (e) => { e.preventDefault(); setDeferredPrompt(e); };
     const onInstalled = () => setDeferredPrompt(null);
@@ -471,6 +476,14 @@ export default function App() {
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="flex flex-col items-center text-center py-1 animate-fade-in">
+              {inAppBrowser && !dismissInApp && (
+                <div className="w-full max-w-sm mb-3 rounded-lg border border-amber-500/50 bg-amber-950/30 px-3 py-2 text-left">
+                  <p className="font-mono text-[10px] text-amber-300 leading-relaxed">
+                    ⚠️ Parece que has abierto esto <strong>dentro de otra app</strong> (WhatsApp/Instagram…). Aquí tu perfil y amigos <strong>no se guardan bien</strong> (identidad distinta). Ábrelo en tu <strong>navegador</strong> (menú ⋮ → “Abrir en Chrome/Safari”) o en la <strong>app instalada</strong>.
+                  </p>
+                  <button onClick={() => setDismissInApp(true)} className="mt-1 font-mono text-[9px] text-amber-500/70 underline">Entendido, seguir aquí igualmente</button>
+                </div>
+              )}
               <h1 className="font-tactical text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
                 BATTLECHIS
               </h1>
