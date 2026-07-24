@@ -471,6 +471,7 @@ export default function App() {
               checkNickname={mp.checkNickname}
               setPassword={mp.setPassword}
               claimProfile={mp.claimProfile}
+              onLogout={async () => { await mp.logout(); setOnboarded(false); }}
               onClose={() => { setShowProfile(false); setOnboarded(true); }}
             />
           )}
@@ -499,6 +500,29 @@ export default function App() {
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="flex flex-col items-center text-center py-1 animate-fade-in">
+              {/* Top-right corner: notifications bell + profile */}
+              {mp.available && (
+                <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 40 }} className="flex items-center gap-2">
+                  {mp.pushSupported && (
+                    <button
+                      onClick={async () => { const r = await mp.enablePush(); if (!r.ok) alert(`No se pudieron activar los avisos: ${r.msg}`); }}
+                      title={mp.pushEnabled ? 'Avisos activados' : 'Activar avisos'}
+                      className={`p-2 rounded-full border transition-all ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/40' : 'border-slate-700 text-slate-400 bg-[#0d101a]/80 hover:border-amber-500/60 hover:text-amber-300'}`}
+                    >
+                      {mp.pushEnabled ? '🔔' : '🔕'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowProfile(true)}
+                    title="Tu perfil"
+                    className="flex items-center gap-1.5 pl-1.5 pr-3 py-1 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
+                    style={{ maxWidth: '48vw' }}
+                  >
+                    <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
+                    <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Perfil'}</span>
+                  </button>
+                </div>
+              )}
               {inAppBrowser && !dismissInApp && (
                 <div className="w-full max-w-sm mb-3 rounded-lg border border-amber-500/50 bg-amber-950/30 px-3 py-2 text-left">
                   <p className="font-mono text-[10px] text-amber-300 leading-relaxed">
@@ -510,18 +534,9 @@ export default function App() {
               <h1 className="font-tactical text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
                 BATTLECHIS
               </h1>
-              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-0.5 mb-2">
+              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-0.5 mb-4">
                 Risk + Parchís táctico
               </p>
-              {/* Profile chip — tap to edit nickname + avatar */}
-              <button
-                onClick={() => setShowProfile(true)}
-                className="mb-3 flex items-center gap-2 px-4 py-1.5 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
-              >
-                <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
-                <span className="font-tactical text-sm text-white">{mp.profile?.nickname || 'Elige tu perfil'}</span>
-                <Settings className="w-3.5 h-3.5 text-slate-500" />
-              </button>
               <div className="flex flex-col gap-2 w-full max-w-xs">
                 <button
                   onClick={() => setHomeScreen(false)}
@@ -543,17 +558,6 @@ export default function App() {
                     className="btn-tactical border-cyan-500/50 text-cyan-300 bg-cyan-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-cyan-900/30"
                   >
                     👥 AMIGOS Y RANKING
-                  </button>
-                )}
-                {mp.available && mp.pushSupported && (
-                  <button
-                    onClick={async () => {
-                      const r = await mp.enablePush();
-                      alert(r.ok ? '🔔 Avisos activados: te avisaremos cuando sea tu turno o te ataquen, aunque tengas la app cerrada.' : `No se pudieron activar: ${r.msg}`);
-                    }}
-                    className={`btn-tactical font-bold tracking-widest text-sm py-2.5 ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/20 hover:bg-green-900/30' : 'border-amber-500/60 text-amber-300 bg-amber-950/20 hover:bg-amber-900/30'}`}
-                  >
-                    {mp.pushEnabled ? '✅ AVISOS ACTIVADOS' : '🔔 ACTIVAR AVISOS'}
                   </button>
                 )}
                 {canShowInstall ? (

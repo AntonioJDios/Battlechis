@@ -5,7 +5,7 @@ import { UserRound, Check, X, Loader2, LogIn } from 'lucide-react';
 // or log in with name + password to use your profile on this device.
 const AVATARS = ['🎖️','⭐','🔥','💀','🐉','🦅','🐺','🦁','🐻','🦊','👑','⚔️','🛡️','🚀','⚡','🎯','🐢','🦈','🤖','👽','🐙','🦖'];
 
-export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onClose }) {
+export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, onClose }) {
   const hasProfile = !!profile?.nickname;
   const [mode, setMode] = useState('edit'); // 'edit' (create/edit) | 'login'
 
@@ -59,6 +59,15 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
     if (r && r.ok === false) { setErr(r.msg || 'No se pudo entrar.'); return; }
     setSaved(true);
     setTimeout(onClose, 700);
+  };
+
+  const doLogout = async () => {
+    const warn = profile?.hasPassword
+      ? '¿Cerrar sesión? Podrás volver a entrar con tu nombre y contraseña.'
+      : '⚠️ No has puesto contraseña. Si cierras sesión PERDERÁS este perfil (no podrás volver a entrar). ¿Continuar?';
+    if (!window.confirm(warn)) return;
+    await onLogout();
+    onClose();
   };
 
   return (
@@ -133,6 +142,11 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
             <button onClick={() => { setMode('login'); setErr(null); }} className="font-mono text-[10px] text-cyan-400/80 hover:text-cyan-300 underline text-center">
               ¿Ya tienes un perfil en otro dispositivo? Entrar
             </button>
+            {hasProfile && onLogout && (
+              <button onClick={doLogout} className="font-mono text-[10px] text-red-400/80 hover:text-red-300 text-center mt-1">
+                Cerrar sesión / cambiar de usuario
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>

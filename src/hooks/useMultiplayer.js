@@ -193,6 +193,17 @@ export function useMultiplayer() {
     } catch (e) { return { ok: false, msg: e.message }; }
   }, [ensureAuth]);
 
+  // ── Log out: drop this identity and start a fresh anonymous one ──
+  const logout = useCallback(async () => {
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    try { localStorage.removeItem('bc_profile'); localStorage.removeItem('bc_name'); } catch { /* ignore */ }
+    setProfile({ nickname: '', avatar: DEFAULT_AVATAR, friendCode: null, hasPassword: false });
+    try {
+      const { data } = await supabase.auth.signInAnonymously();
+      if (data?.user) setUserId(data.user.id);
+    } catch { /* ignore */ }
+  }, []);
+
   // ── Record a finished game for the caller (1 played, +1 won if `won`) ──
   const recordResult = useCallback(async (won) => {
     if (!isSupabaseConfigured) return;
@@ -634,6 +645,7 @@ export function useMultiplayer() {
     checkNickname,
     setPassword,
     claimProfile,
+    logout,
     recordResult,
     fetchRanking,
     searchProfiles,
