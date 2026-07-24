@@ -200,6 +200,7 @@ export default function App() {
   // ── Profile / friends (ranking lives inside the friends modal) ──
   const [showProfile, setShowProfile] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
+  const [onboarded, setOnboarded] = useState(false); // dismissed the create-profile prompt this session
   const [friendToast, setFriendToast] = useState(null); // { ok, text }
   const friendLinkRef = React.useRef(false);
 
@@ -260,6 +261,15 @@ export default function App() {
       setTimeout(() => setFriendToast(null), 4500);
     });
   }, [mp.available, mp.addFriendByCode]);
+
+  // Onboarding: on the home screen, if online is available and you have no
+  // profile yet, prompt to create one (or log in). Once, dismissible.
+  useEffect(() => {
+    if (!homeScreen || !mp.available || onboarded || showProfile) return;
+    if (mp.profile?.nickname) return;
+    const t = setTimeout(() => { if (!mp.profile?.nickname) setShowProfile(true); }, 900);
+    return () => clearTimeout(t);
+  }, [homeScreen, mp.available, mp.profile?.nickname, onboarded, showProfile]);
 
   // Seats config for the lobby, derived from the setup screen (faction + human/bot).
   const seatsConfig = setupPlayers.map((p) => ({
@@ -455,7 +465,14 @@ export default function App() {
           )}
 
           {showProfile && (
-            <ProfileModal profile={mp.profile} onSave={mp.saveProfile} checkNickname={mp.checkNickname} onClose={() => setShowProfile(false)} />
+            <ProfileModal
+              profile={mp.profile}
+              onSave={mp.saveProfile}
+              checkNickname={mp.checkNickname}
+              setPassword={mp.setPassword}
+              claimProfile={mp.claimProfile}
+              onClose={() => { setShowProfile(false); setOnboarded(true); }}
+            />
           )}
           {showFriends && (
             <FriendsModal

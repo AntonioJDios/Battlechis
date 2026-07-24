@@ -273,3 +273,59 @@ returns void language sql security invoker as $$
         games_won    = public.battlechis_profiles.games_won + case when won then 1 else 0 end,
         updated_at   = now();
 $$;
+
+-- ── Contraseña opcional por perfil (para usarlo en otro dispositivo) ──
+-- Sin correos ni recuperación: nombre + contraseña. Hash bcrypt (pgcrypto).
+create extension if not exists pgcrypto;
+alter table public.battlechis_profiles add column if not exists pass_hash    text;
+alter table public.battlechis_profiles add column if not exists has_password boolean not null default false;
+
+-- El hash NO debe poder leerse desde el cliente (los perfiles son legibles por
+-- todos para búsqueda/ranking). Restringimos las columnas visibles.
+revoke select on public.battlechis_profiles from anon, authenticated;
+grant  select (user_id, nickname, avatar, games_played, games_won, updated_at, friend_code, has_password)
+  on public.battlechis_profiles to anon, authenticated;
+
+-- Poner/cambiar la contraseña de MI perfil.
+create or replace function public.battlechis_set_password(p_password text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then raise exception 'NO_AUTH'; end if;
+  if length(coalesce(p_password, '')) < 3 then raise exception 'SHORT'; end if;
+  update public.battlechis_profiles
+     set pass_hash = crypt(p_password, gen_salt('bf')), has_password = true, updated_at = now()
+   where user_id = auth.uid();
+end;
+$$;
+grant execute on function public.battlechis_set_password(text) to authenticated;
+
+-- Reclamar/usar un perfil en ESTE dispositivo con nombre + contraseña.
+-- Traspasa el perfil (y sus amistades/invitaciones) a la identidad que llama.
+create or replace function public.battlechis_claim_profile(p_name text, p_password text)
+returns table(nickname text, avatar text)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_caller uuid := auth.uid();
+  v_src    uuid;
+begin
+  if v_caller is null then raise exception 'NO_AUTH'; end if;
+  select user_id into v_src from public.battlechis_profiles
+    where lower(nickname) = lower(p_name) and pass_hash is not null and pass_hash = crypt(p_password, pass_hash);
+  if v_src is null then raise exception 'INVALID'; end if;
+  if v_src <> v_caller then
+    -- Suelta el perfil (vacío) de la identidad actual para poder adoptar el otro.
+    delete from public.battlechis_friends      where user_id = v_caller or friend_id = v_caller;
+    delete from public.battlechis_game_invites where from_user = v_caller or to_user = v_caller;
+    delete from public.battlechis_push         where user_id = v_caller;
+    delete from public.battlechis_profiles     where user_id = v_caller;
+    -- Reasigna el perfil de origen (y sus relaciones) a la identidad actual.
+    update public.battlechis_profiles     set user_id  = v_caller where user_id  = v_src;
+    update public.battlechis_friends      set user_id  = v_caller where user_id  = v_src;
+    update public.battlechis_friends      set friend_id = v_caller where friend_id = v_src;
+    update public.battlechis_game_invites set from_user = v_caller where from_user = v_src;
+    update public.battlechis_game_invites set to_user   = v_caller where to_user   = v_src;
+  end if;
+  return query select p.nickname, p.avatar from public.battlechis_profiles p where p.user_id = v_caller;
+end;
+$$;
+grant execute on function public.battlechis_claim_profile(text, text) to authenticated;

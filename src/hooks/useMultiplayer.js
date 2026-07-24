@@ -13,11 +13,11 @@ const DEFAULT_AVATAR = '🎖️';
 function loadLocalProfile() {
   try {
     const raw = localStorage.getItem('bc_profile');
-    if (raw) { const p = JSON.parse(raw); return { nickname: p.nickname || '', avatar: p.avatar || DEFAULT_AVATAR, friendCode: p.friendCode || null }; }
+    if (raw) { const p = JSON.parse(raw); return { nickname: p.nickname || '', avatar: p.avatar || DEFAULT_AVATAR, friendCode: p.friendCode || null, hasPassword: !!p.hasPassword }; }
   } catch { /* ignore */ }
   let nickname = '';
   try { nickname = localStorage.getItem('bc_name') || ''; } catch { /* ignore */ } // migrate old key
-  return { nickname, avatar: DEFAULT_AVATAR, friendCode: null };
+  return { nickname, avatar: DEFAULT_AVATAR, friendCode: null, hasPassword: false };
 }
 
 // VAPID public key (safe to expose). Set VITE_VAPID_PUBLIC_KEY (or NEXT_PUBLIC_…).
@@ -82,18 +82,12 @@ export function useMultiplayer() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     ensureAuth().then(async (uid) => {
-      // 1) Basic profile (nickname/avatar) — always available.
+      // 1) Basic profile (nickname/avatar/has_password) — always available.
       try {
-        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar').eq('user_id', uid).maybeSingle();
-        const localNick = (profileRef.current.nickname || '').trim();
-        const dbNick = data?.nickname;
-        // Don't let the DB default ('Comandante') clobber a real name this device
-        // still remembers — instead repair the DB with the local name.
-        if (localNick && localNick !== 'Comandante' && (!dbNick || dbNick === 'Comandante')) {
-          await supabase.from(PROFILE_TABLE).upsert({ user_id: uid, nickname: localNick, avatar: profileRef.current.avatar || DEFAULT_AVATAR });
-        } else if (data) {
+        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar, has_password').eq('user_id', uid).maybeSingle();
+        if (data) {
           setProfile((p) => {
-            const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar };
+            const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar, hasPassword: !!data.has_password };
             try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
             return next;
           });
@@ -155,6 +149,48 @@ export function useMultiplayer() {
       try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
     } catch (e) { return { ok: false, msg: e.message }; }
     return { ok: true };
+  }, [ensureAuth]);
+
+  // ── Set/change MY profile password (to use it on another device) ──
+  const setPassword = useCallback(async (pw) => {
+    if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado.' };
+    const p = (pw ?? '').trim();
+    if (p.length < 3) return { ok: false, msg: 'La contraseña es muy corta (mínimo 3).' };
+    try {
+      await ensureAuth();
+      const { error } = await supabase.rpc('battlechis_set_password', { p_password: p });
+      if (error) return { ok: false, msg: /SHORT/.test(error.message) ? 'La contraseña es muy corta.' : error.message };
+      setProfile((prev) => {
+        const next = { ...prev, hasPassword: true };
+        try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+      });
+      return { ok: true };
+    } catch (e) { return { ok: false, msg: e.message }; }
+  }, [ensureAuth]);
+
+  // ── Log in / claim an existing profile on THIS device (name + password) ──
+  const claimProfile = useCallback(async (name, pw) => {
+    if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado.' };
+    const n = (name ?? '').trim(); const p = (pw ?? '').trim();
+    if (!n || !p) return { ok: false, msg: 'Escribe nombre y contraseña.' };
+    try {
+      await ensureAuth();
+      const { data, error } = await supabase.rpc('battlechis_claim_profile', { p_name: n, p_password: p });
+      if (error) return { ok: false, msg: /INVALID/.test(error.message) ? 'Nombre o contraseña incorrectos.' : error.message };
+      const row = Array.isArray(data) ? data[0] : data;
+      const uid = await ensureAuth();
+      const { data: pr } = await supabase.from(PROFILE_TABLE).select('nickname, avatar, friend_code, has_password').eq('user_id', uid).maybeSingle();
+      const next = {
+        nickname: pr?.nickname || row?.nickname || n,
+        avatar: pr?.avatar || row?.avatar || DEFAULT_AVATAR,
+        friendCode: pr?.friend_code || null,
+        hasPassword: pr?.has_password ?? true,
+      };
+      setProfile(next);
+      try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+      return { ok: true, nickname: next.nickname };
+    } catch (e) { return { ok: false, msg: e.message }; }
   }, [ensureAuth]);
 
   // ── Record a finished game for the caller (1 played, +1 won if `won`) ──
@@ -596,6 +632,8 @@ export function useMultiplayer() {
     profile,
     saveProfile,
     checkNickname,
+    setPassword,
+    claimProfile,
     recordResult,
     fetchRanking,
     searchProfiles,
