@@ -231,21 +231,22 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
             </div>
           </div>
 
-          {/* Invite friends (push) */}
-          {(() => {
+          {/* Invite friends (push) — host picks a friend; a seat opens if needed */}
+          {isHost && (() => {
             const seatedIds = new Set(seats.filter((s) => s.userId).map((s) => s.userId));
-            const hasFreeSeat = seats.some((s) => s.type === 'human' && !s.userId);
             const invitable = (friends || []).filter((f) => !seatedIds.has(f.user_id));
-            if (!hasFreeSeat || (friends && invitable.length === 0 && friends.length === 0)) return null;
+            const openHuman = seats.filter((s) => s.type === 'human' && !s.userId).length;
+            const hasBot = seats.some((s) => s.type === 'bot');
+            const canSeat = openHuman > 0 || hasBot;
             return (
               <div className="border-t border-slate-800 pt-3">
                 <div className="font-tactical text-[10px] text-gray-400 uppercase tracking-wider mb-2">Invitar amigos</div>
                 {friends === null ? (
                   <div className="flex items-center gap-2 text-cyan-400 font-mono text-[11px] py-1"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>
+                ) : friends.length === 0 ? (
+                  <p className="font-mono text-[10px] text-gray-500">Aún no tienes amigos. Añádelos desde la portada con <strong className="text-cyan-400">👥 AMIGOS Y RANKING</strong>.</p>
                 ) : invitable.length === 0 ? (
-                  <p className="font-mono text-[10px] text-gray-500">
-                    {friends.length === 0 ? 'Aún no tienes amigos. Añádelos desde la portada 👥' : 'Tus amigos ya están en la partida.'}
-                  </p>
+                  <p className="font-mono text-[10px] text-gray-500">Tus amigos ya están en la partida.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {invitable.map((f) => (
@@ -253,9 +254,14 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                         <span className="text-base shrink-0">{f.avatar || '🎖️'}</span>
                         <span className="font-tactical text-[11px] text-white flex-1 truncate">{f.nickname || 'Comandante'}</span>
                         <button
-                          onClick={async () => { await mp.inviteFriend(f.user_id, game.code); setInvited((p) => ({ ...p, [f.user_id]: true })); }}
-                          disabled={invited[f.user_id]}
-                          className={`py-1 px-2.5 text-[10px] font-bold rounded border flex items-center gap-1 shrink-0 ${invited[f.user_id] ? 'border-green-500/40 text-green-400 bg-green-950/20' : 'border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30'}`}
+                          onClick={async () => {
+                            const r = await mp.ensureOpenSeat(game.id);
+                            if (!r.ok) { setLocalError(r.msg); return; }
+                            await mp.inviteFriend(f.user_id, game.code);
+                            setInvited((p) => ({ ...p, [f.user_id]: true }));
+                          }}
+                          disabled={invited[f.user_id] || !canSeat}
+                          className={`py-1 px-2.5 text-[10px] font-bold rounded border flex items-center gap-1 shrink-0 ${invited[f.user_id] ? 'border-green-500/40 text-green-400 bg-green-950/20' : 'border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30 disabled:opacity-40'}`}
                         >
                           {invited[f.user_id] ? '✓ Invitado' : '🎮 Invitar'}
                         </button>
@@ -263,7 +269,13 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                     ))}
                   </div>
                 )}
-                <p className="font-mono text-[9px] text-gray-600 mt-1.5">Recibirá un aviso push (si tiene las notificaciones activadas) con el enlace para unirse.</p>
+                <p className="font-mono text-[9px] text-gray-600 mt-1.5">
+                  {openHuman > 0
+                    ? `Hay ${openHuman} puesto${openHuman !== 1 ? 's' : ''} libre${openHuman !== 1 ? 's' : ''}. `
+                    : hasBot ? 'Al invitar, un puesto 🤖 se abrirá para tu amigo. '
+                    : 'Partida llena de humanos. '}
+                  Le llegará un aviso push (si tiene notificaciones activadas) con el enlace.
+                </p>
               </div>
             );
           })()}

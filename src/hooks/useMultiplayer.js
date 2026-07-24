@@ -201,6 +201,23 @@ export function useMultiplayer() {
     return data || [];
   }, [ensureAuth, listFriends]);
 
+  // Make sure there's a free human seat for an invited friend: if none, turn a
+  // bot seat into an open human seat. Returns { ok, msg? }.
+  const ensureOpenSeat = useCallback(async (gameId) => {
+    const { data: row, error } = await supabase.from(TABLE).select('*').eq('id', gameId).single();
+    if (error || !row) return { ok: false, msg: 'No se pudo leer la partida.' };
+    const seats = [...(row.state?.seats ?? [])];
+    if (seats.some((s) => s.type === 'human' && !s.userId)) return { ok: true }; // already room
+    const botIdx = seats.findIndex((s) => s.type === 'bot');
+    if (botIdx === -1) return { ok: false, msg: 'La partida ya está llena de jugadores humanos.' };
+    seats[botIdx] = { ...seats[botIdx], type: 'human', userId: null };
+    const { data, error: upErr } = await supabase
+      .from(TABLE).update({ state: { ...row.state, seats } }).eq('id', gameId).select().single();
+    if (upErr) return { ok: false, msg: upErr.message };
+    setGame(data);
+    return { ok: true };
+  }, []);
+
   // Apply a freshly-read row (from realtime OR polling), de-duplicated by updated_at.
   const applyRow = useCallback((row) => {
     if (!row) return;
@@ -469,6 +486,7 @@ export function useMultiplayer() {
     listFriends,
     removeFriend,
     inviteFriend,
+    ensureOpenSeat,
     refreshGame,
     pushState,
     setOnRemoteState,
