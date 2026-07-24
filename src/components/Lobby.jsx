@@ -23,6 +23,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   const [localError, setLocalError] = useState(null);
   const [foundGame, setFoundGame] = useState(null); // game row looked up by code
   const [myGames, setMyGames] = useState(null); // in-progress games list (null = not loaded)
+  const [invites, setInvites] = useState(null); // game invitations received (null = not loaded)
   const [friends, setFriends] = useState(null); // friend circle (for inviting)
   const [invited, setInvited] = useState({});   // friendId -> true once a push invite is sent
   const linkRef = React.useRef(null);
@@ -33,11 +34,29 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     mp.listFriends().then(setFriends).catch(() => setFriends([]));
   }, [view, mp.available, mp.listFriends]);
 
-  // Load this device's unfinished games.
+  // Load this device's unfinished games + invitations received.
   const loadMyGames = async () => {
-    setView('mygames'); setMyGames(null); setLocalError(null);
+    setView('mygames'); setMyGames(null); setInvites(null); setLocalError(null);
     try { setMyGames(await mp.listMyGames()); }
     catch (e) { setLocalError(e.message); setMyGames([]); }
+    try { setInvites(await mp.listGameInvites()); } catch { setInvites([]); }
+  };
+
+  // Join a game I was invited to (look it up by its code).
+  const joinInvite = async (inv) => {
+    setLocalError(null); setCode(inv.code);
+    try {
+      const row = await mp.findGame(inv.code);
+      if (row.status === 'waiting') { setFoundGame(row); setView('pickSeat'); return; }
+      const isMember = (row.member_ids || []).includes(mp.userId) || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+      if (isMember) { setView('reconnecting'); mp.reconnect(row); }
+      else { setLocalError('Esa partida ya ha empezado y no formas parte de ella.'); }
+    } catch (e) { setLocalError(e.message); }
+  };
+
+  const dismissInvite = async (inv) => {
+    await mp.dismissGameInvite(inv.id);
+    setInvites((prev) => (prev || []).filter((x) => x.id !== inv.id));
   };
 
   // Resume a saved game: playing → into the game; waiting → back to its lobby room.
@@ -257,7 +276,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                           onClick={async () => {
                             const r = await mp.ensureOpenSeat(game.id);
                             if (!r.ok) { setLocalError(r.msg); return; }
-                            await mp.inviteFriend(f.user_id, game.code);
+                            await mp.inviteToGame(f.user_id, game.id, game.code);
                             setInvited((p) => ({ ...p, [f.user_id]: true }));
                           }}
                           disabled={invited[f.user_id] || !canSeat}
@@ -274,7 +293,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                     ? `Hay ${openHuman} puesto${openHuman !== 1 ? 's' : ''} libre${openHuman !== 1 ? 's' : ''}. `
                     : hasBot ? 'Al invitar, un puesto 🤖 se abrirá para tu amigo. '
                     : 'Partida llena de humanos. '}
-                  Le llegará un aviso push (si tiene notificaciones activadas) con el enlace.
+                  La invitación le aparece en <strong>Mis partidas</strong> (y recibe un aviso push si lo tiene activado).
                 </p>
               </div>
             );
@@ -420,6 +439,26 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     return (
       <Shell onBack={() => setView('choose')} title="Mis partidas">
         <div className="flex flex-col gap-2">
+          {/* Invitations received */}
+          {invites && invites.length > 0 && (
+            <div className="mb-1">
+              <div className="font-tactical text-[10px] text-amber-400 uppercase tracking-wider mb-1">🎮 Te han invitado</div>
+              <div className="flex flex-col gap-1.5">
+                {invites.map((inv) => (
+                  <div key={inv.id} className="flex items-center gap-2 bg-[#0d101a] border border-amber-500/30 rounded px-2 py-2">
+                    <span className="text-base shrink-0">{inv.from?.avatar || '🎖️'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-tactical text-[11px] text-white truncate">{inv.from?.nickname || 'Un amigo'} te invita</div>
+                      <div className="font-mono text-[9px] text-gray-500">Código {inv.code}</div>
+                    </div>
+                    <button onClick={() => joinInvite(inv)} className="btn-tactical border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20 py-1.5 px-3 text-[11px] font-bold shrink-0">Unirse</button>
+                    <button onClick={() => dismissInvite(inv)} title="Descartar" className="p-1.5 text-slate-600 hover:text-red-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-800 mt-2" />
+            </div>
+          )}
           {myGames === null ? (
             <div className="flex items-center justify-center gap-2 py-6 text-cyan-400 font-mono text-[11px]">
               <Loader2 className="w-5 h-5 animate-spin" /> Cargando…

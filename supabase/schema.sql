@@ -165,10 +165,28 @@ create policy battlechis_profiles_write
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
--- Código de amigo (para invitar): se rellena desde la app la primera vez.
+-- Código de amigo (interno / heredado): se rellena desde la app la primera vez.
 alter table public.battlechis_profiles add column if not exists friend_code text;
 create unique index if not exists battlechis_profiles_friend_code_idx
   on public.battlechis_profiles (friend_code);
+
+-- ── Nombres de perfil ÚNICOS (así se buscan y se añaden entre ellos) ──
+-- Quitamos el valor por defecto/obligatorio: cada uno elige su nombre único.
+alter table public.battlechis_profiles alter column nickname drop default;
+alter table public.battlechis_profiles alter column nickname drop not null;
+-- El genérico "Comandante" se libera (esos perfiles re-eligen nombre).
+update public.battlechis_profiles set nickname = null where nickname = 'Comandante';
+-- Deshacemos posibles colisiones restantes para poder crear el índice único.
+with d as (
+  select user_id, row_number() over (partition by lower(nickname) order by updated_at, user_id) as rn
+  from public.battlechis_profiles where nickname is not null
+)
+update public.battlechis_profiles p
+   set nickname = p.nickname || '_' || substr(replace(p.user_id::text, '-', ''), 1, 4)
+  from d where d.user_id = p.user_id and d.rn > 1;
+-- Único, sin distinguir mayúsculas, ignorando los sin-nombre (null).
+create unique index if not exists battlechis_profiles_nick_uidx
+  on public.battlechis_profiles (lower(nickname)) where nickname is not null;
 
 -- ── Amistades (mutuas): fila dirigida A→B; se consideran amigos en ambos sentidos ──
 create table if not exists public.battlechis_friends (
@@ -178,28 +196,71 @@ create table if not exists public.battlechis_friends (
   primary key (user_id, friend_id)
 );
 
+-- Estado de la amistad: 'pending' (solicitud enviada) | 'accepted'.
+-- Las filas antiguas se quedan como 'accepted' (ya erais amigos).
+alter table public.battlechis_friends add column if not exists status text not null default 'accepted';
+
 alter table public.battlechis_friends enable row level security;
 
--- Ves las amistades en las que participas (las que creaste y las que te crearon).
+-- Ves las amistades/solicitudes en las que participas.
 drop policy if exists battlechis_friends_select on public.battlechis_friends;
 create policy battlechis_friends_select
   on public.battlechis_friends for select
   to authenticated
   using (user_id = auth.uid() or friend_id = auth.uid());
 
--- Solo creas amistades donde TÚ eres quien añade.
+-- Solo creas solicitudes donde TÚ eres quien envía.
 drop policy if exists battlechis_friends_insert on public.battlechis_friends;
 create policy battlechis_friends_insert
   on public.battlechis_friends for insert
   to authenticated
   with check (user_id = auth.uid());
 
--- Puedes borrar cualquier amistad en la que participes (des-amigar).
+-- El destinatario puede actualizar (aceptar) la solicitud dirigida a él.
+drop policy if exists battlechis_friends_update on public.battlechis_friends;
+create policy battlechis_friends_update
+  on public.battlechis_friends for update
+  to authenticated
+  using (friend_id = auth.uid())
+  with check (friend_id = auth.uid());
+
+-- Puedes borrar cualquier amistad/solicitud en la que participes.
 drop policy if exists battlechis_friends_delete on public.battlechis_friends;
 create policy battlechis_friends_delete
   on public.battlechis_friends for delete
   to authenticated
   using (user_id = auth.uid() or friend_id = auth.uid());
+
+-- ── Invitaciones a partida (dentro de la app, sin enlaces) ──
+create table if not exists public.battlechis_game_invites (
+  id         uuid primary key default gen_random_uuid(),
+  game_id    uuid not null,
+  code       text not null,          -- código de la partida (para unirse)
+  from_user  uuid not null,          -- anfitrión que invita
+  to_user    uuid not null,          -- perfil invitado
+  created_at timestamptz not null default now(),
+  unique (game_id, to_user)
+);
+
+alter table public.battlechis_game_invites enable row level security;
+
+drop policy if exists battlechis_game_invites_select on public.battlechis_game_invites;
+create policy battlechis_game_invites_select
+  on public.battlechis_game_invites for select
+  to authenticated
+  using (from_user = auth.uid() or to_user = auth.uid());
+
+drop policy if exists battlechis_game_invites_insert on public.battlechis_game_invites;
+create policy battlechis_game_invites_insert
+  on public.battlechis_game_invites for insert
+  to authenticated
+  with check (from_user = auth.uid());
+
+drop policy if exists battlechis_game_invites_delete on public.battlechis_game_invites;
+create policy battlechis_game_invites_delete
+  on public.battlechis_game_invites for delete
+  to authenticated
+  using (from_user = auth.uid() or to_user = auth.uid());
 
 -- Registrar el resultado de una partida para el usuario que llama (suma 1 a
 -- jugadas, y 1 a ganadas si `won`). Atómico y respeta RLS (security invoker).

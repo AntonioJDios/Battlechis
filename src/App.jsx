@@ -253,7 +253,9 @@ export default function App() {
     try { const u = new URL(window.location.href); u.searchParams.delete('friend'); window.history.replaceState({}, '', u); } catch { /* ignore */ }
     mp.addFriendByCode(friendCode).then((r) => {
       setFriendToast(r.ok
-        ? { ok: true, text: `¡Ahora eres amigo de ${r.friend?.nickname || 'tu amigo'}! ${r.friend?.avatar || ''}` }
+        ? { ok: true, text: r.accepted
+            ? `¡Ahora sois amigos, ${r.friend?.nickname || ''}! ${r.friend?.avatar || ''}`
+            : `Solicitud de amistad enviada a ${r.friend?.nickname || 'tu amigo'} ${r.friend?.avatar || ''}` }
         : { ok: false, text: r.msg });
       setTimeout(() => setFriendToast(null), 4500);
     });
@@ -453,13 +455,17 @@ export default function App() {
           )}
 
           {showProfile && (
-            <ProfileModal profile={mp.profile} onSave={mp.saveProfile} onClose={() => setShowProfile(false)} />
+            <ProfileModal profile={mp.profile} onSave={mp.saveProfile} checkNickname={mp.checkNickname} onClose={() => setShowProfile(false)} />
           )}
           {showFriends && (
             <FriendsModal
               profile={mp.profile}
               myUserId={mp.userId}
-              addFriendByCode={mp.addFriendByCode}
+              searchProfiles={mp.searchProfiles}
+              sendFriendRequest={mp.sendFriendRequest}
+              listFriendRequests={mp.listFriendRequests}
+              acceptFriendRequest={mp.acceptFriendRequest}
+              rejectFriendRequest={mp.rejectFriendRequest}
               fetchRanking={mp.fetchRanking}
               removeFriend={mp.removeFriend}
               onClose={() => setShowFriends(false)}

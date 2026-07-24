@@ -1,19 +1,32 @@
-import React, { useState } from 'react';
-import { UserRound, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserRound, Check, X, Loader2 } from 'lucide-react';
 
-// Pick-your-identity modal: a nickname + an emoji avatar, no password.
-// Saved per-device (localStorage) and mirrored to battlechis_profiles.
+// Pick-your-identity modal: a UNIQUE nickname + an emoji avatar, no password.
+// The name is how friends find you, so it must be free.
 const AVATARS = ['🎖️','⭐','🔥','💀','🐉','🦅','🐺','🦁','🐻','🦊','👑','⚔️','🛡️','🚀','⚡','🎯','🐢','🦈','🤖','👽','🐙','🦖'];
 
-export default function ProfileModal({ profile, onSave, onClose }) {
+export default function ProfileModal({ profile, onSave, checkNickname, onClose }) {
   const [nickname, setNickname] = useState(profile?.nickname || '');
   const [avatar, setAvatar] = useState(profile?.avatar || '🎖️');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [avail, setAvail] = useState(null); // null | 'checking' | true | false
 
   const initial = React.useRef({ nickname: profile?.nickname || '', avatar: profile?.avatar || '🎖️' });
   const dirty = nickname !== initial.current.nickname || avatar !== initial.current.avatar;
+  const name = nickname.trim();
+
+  // Live availability check (debounced) as they type a new name.
+  useEffect(() => {
+    if (!checkNickname || name.length < 2 || name === initial.current.nickname.trim()) { setAvail(null); return; }
+    setAvail('checking');
+    const t = setTimeout(async () => {
+      const r = await checkNickname(name);
+      setAvail(r.ok ? true : false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [name, checkNickname]);
 
   // Don't lose edits by tapping outside without saving.
   const tryClose = () => {
@@ -26,7 +39,7 @@ export default function ProfileModal({ profile, onSave, onClose }) {
     const r = await onSave({ nickname, avatar });
     setBusy(false);
     if (r && r.ok === false) { setErr(r.msg || 'No se pudo guardar.'); return; }
-    initial.current = { nickname: (nickname || '').trim() || 'Comandante', avatar };
+    initial.current = { nickname: name, avatar };
     setSaved(true);
     setTimeout(onClose, 700);
   };
@@ -48,7 +61,7 @@ export default function ProfileModal({ profile, onSave, onClose }) {
           <div className="flex items-center gap-3">
             <div style={{ fontSize: 40, lineHeight: 1, width: 56, textAlign: 'center' }}>{avatar}</div>
             <div className="flex-1">
-              <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Apodo</label>
+              <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Nombre (único)</label>
               <input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
@@ -56,6 +69,11 @@ export default function ProfileModal({ profile, onSave, onClose }) {
                 placeholder="Tu nombre"
                 className="w-full bg-[#121625] border border-cyan-500/40 text-white font-mono text-sm p-2 rounded focus:outline-none focus:border-cyan-400 mt-1"
               />
+              <div className="h-3 mt-0.5">
+                {avail === 'checking' && <span className="font-mono text-[9px] text-gray-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> comprobando…</span>}
+                {avail === true && <span className="font-mono text-[9px] text-green-400">✓ disponible</span>}
+                {avail === false && <span className="font-mono text-[9px] text-red-400">✗ ya está cogido</span>}
+              </div>
             </div>
           </div>
 
@@ -78,8 +96,8 @@ export default function ProfileModal({ profile, onSave, onClose }) {
 
           <button
             onClick={save}
-            disabled={busy || saved}
-            className={`btn-tactical py-2.5 text-xs font-bold flex items-center justify-center gap-2 ${saved ? 'border-green-400 text-green-400 bg-green-950/20' : 'border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20'}`}
+            disabled={busy || saved || name.length < 2 || avail === false || avail === 'checking'}
+            className={`btn-tactical py-2.5 text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-40 ${saved ? 'border-green-400 text-green-400 bg-green-950/20' : 'border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20'}`}
           >
             <Check className="w-4 h-4" /> {saved ? '✓ Guardado en el servidor' : busy ? 'Guardando…' : 'Guardar perfil'}
           </button>
