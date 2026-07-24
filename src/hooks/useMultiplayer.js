@@ -84,11 +84,19 @@ export function useMultiplayer() {
       // 1) Basic profile (nickname/avatar) — always available.
       try {
         const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar').eq('user_id', uid).maybeSingle();
-        if (data) setProfile((p) => {
-          const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar };
-          try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
-          return next;
-        });
+        const localNick = (profileRef.current.nickname || '').trim();
+        const dbNick = data?.nickname;
+        // Don't let the DB default ('Comandante') clobber a real name this device
+        // still remembers — instead repair the DB with the local name.
+        if (localNick && localNick !== 'Comandante' && (!dbNick || dbNick === 'Comandante')) {
+          await supabase.from(PROFILE_TABLE).upsert({ user_id: uid, nickname: localNick, avatar: profileRef.current.avatar || DEFAULT_AVATAR });
+        } else if (data) {
+          setProfile((p) => {
+            const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar };
+            try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+          });
+        }
       } catch { /* ignore */ }
       // 2) Friend code — needs the friends schema; skip gracefully if not there.
       try {
