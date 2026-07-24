@@ -81,9 +81,19 @@ export function useMultiplayer() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     ensureAuth().then(async (uid) => {
-      // Pull the stored profile; make sure it has a shareable friend code.
+      // 1) Basic profile (nickname/avatar) — always available.
       try {
-        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar, friend_code').eq('user_id', uid).maybeSingle();
+        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar').eq('user_id', uid).maybeSingle();
+        if (data) setProfile((p) => {
+          const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar };
+          try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+          return next;
+        });
+      } catch { /* ignore */ }
+      // 2) Friend code — needs the friends schema; skip gracefully if not there.
+      try {
+        const { data, error } = await supabase.from(PROFILE_TABLE).select('friend_code').eq('user_id', uid).maybeSingle();
+        if (error) return; // column missing (schema not re-run yet) → link stays "Generando…"
         let friendCode = data?.friend_code || null;
         if (!friendCode) {
           friendCode = makeCode(5);
@@ -92,10 +102,10 @@ export function useMultiplayer() {
             friend_code: friendCode,
             ...(data ? {} : { nickname: profileRef.current.nickname || 'Comandante', avatar: profileRef.current.avatar || DEFAULT_AVATAR }),
           });
-          if (fcErr) friendCode = data?.friend_code || null; // rare code clash → retry next load
+          if (fcErr) return; // rare code clash → retry next load
         }
         setProfile((p) => {
-          const next = { nickname: data?.nickname ?? p.nickname, avatar: data?.avatar ?? p.avatar, friendCode: friendCode ?? p.friendCode };
+          const next = { ...p, friendCode };
           try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
           return next;
         });

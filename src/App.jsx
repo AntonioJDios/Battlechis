@@ -16,7 +16,6 @@ import HandPanel from './components/HandPanel';
 import DefenseModal from './components/DefenseModal';
 import Lobby from './components/Lobby';
 import ProfileModal from './components/ProfileModal';
-import RankingModal from './components/RankingModal';
 import FriendsModal from './components/FriendsModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
@@ -198,9 +197,8 @@ export default function App() {
   const [homeScreen, setHomeScreen] = useState(true);
   const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
 
-  // ── Profile / ranking / friends ──
+  // ── Profile / friends (ranking lives inside the friends modal) ──
   const [showProfile, setShowProfile] = useState(false);
-  const [showRanking, setShowRanking] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [friendToast, setFriendToast] = useState(null); // { ok, text }
   const friendLinkRef = React.useRef(false);
@@ -452,14 +450,12 @@ export default function App() {
           {showProfile && (
             <ProfileModal profile={mp.profile} onSave={mp.saveProfile} onClose={() => setShowProfile(false)} />
           )}
-          {showRanking && (
-            <RankingModal fetchRanking={mp.fetchRanking} myUserId={mp.userId} onClose={() => setShowRanking(false)} />
-          )}
           {showFriends && (
             <FriendsModal
               profile={mp.profile}
+              myUserId={mp.userId}
               addFriendByCode={mp.addFriendByCode}
-              listFriends={mp.listFriends}
+              fetchRanking={mp.fetchRanking}
               removeFriend={mp.removeFriend}
               onClose={() => setShowFriends(false)}
             />
@@ -474,26 +470,26 @@ export default function App() {
 
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
-            <div className="flex flex-col items-center text-center py-2 animate-fade-in">
-              <h1 className="font-tactical text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
+            <div className="flex flex-col items-center text-center py-1 animate-fade-in">
+              <h1 className="font-tactical text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-widest uppercase drop-shadow-[0_0_12px_rgba(0,240,255,0.4)]">
                 BATTLECHIS
               </h1>
-              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-1 mb-3">
+              <p className="font-tactical text-[9px] sm:text-xs text-cyan-400/70 tracking-[4px] uppercase font-bold mt-0.5 mb-2">
                 Risk + Parchís táctico
               </p>
               {/* Profile chip — tap to edit nickname + avatar */}
               <button
                 onClick={() => setShowProfile(true)}
-                className="mb-4 flex items-center gap-2 px-4 py-2 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
+                className="mb-3 flex items-center gap-2 px-4 py-1.5 rounded-full border border-slate-700 bg-[#0d101a]/80 hover:border-cyan-500/50 transition-all"
               >
-                <span className="text-xl leading-none">{mp.profile?.avatar || '🎖️'}</span>
+                <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
                 <span className="font-tactical text-sm text-white">{mp.profile?.nickname || 'Elige tu perfil'}</span>
                 <Settings className="w-3.5 h-3.5 text-slate-500" />
               </button>
-              <div className="flex flex-col gap-2.5 w-full max-w-xs">
+              <div className="flex flex-col gap-2 w-full max-w-xs">
                 <button
                   onClick={() => setHomeScreen(false)}
-                  className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-3 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+                  className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-2.5 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
                 >
                   <Play className="w-5 h-5 mr-1" /> JUGAR
                 </button>
@@ -510,15 +506,7 @@ export default function App() {
                     onClick={() => setShowFriends(true)}
                     className="btn-tactical border-cyan-500/50 text-cyan-300 bg-cyan-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-cyan-900/30"
                   >
-                    👥 AMIGOS
-                  </button>
-                )}
-                {mp.available && (
-                  <button
-                    onClick={() => setShowRanking(true)}
-                    className="btn-tactical border-yellow-500/50 text-yellow-300 bg-yellow-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-yellow-900/30"
-                  >
-                    🏆 RANKING
+                    👥 AMIGOS Y RANKING
                   </button>
                 )}
                 {mp.available && mp.pushSupported && (
@@ -535,7 +523,7 @@ export default function App() {
                 {canShowInstall ? (
                   <button
                     onClick={handleInstall}
-                    className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-widest text-base py-3 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
+                    className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-widest text-base py-2.5 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
                   >
                     📲 INSTALAR APP
                   </button>

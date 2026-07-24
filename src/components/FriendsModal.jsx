@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Users, X, Share2, Copy, Check, UserPlus, Trash2, Loader2 } from 'lucide-react';
+import { Users, X, Share2, Check, UserPlus, Trash2, Loader2 } from 'lucide-react';
 
-// Friends: share your friend link, add someone by code, see/remove your circle.
-export default function FriendsModal({ profile, addFriendByCode, listFriends, removeFriend, onClose }) {
-  const [friends, setFriends] = useState(null);
+// Friends + ranking in one place: share your link, add by code, and see your
+// circle (you + friends) ranked by wins.
+export default function FriendsModal({ profile, myUserId, addFriendByCode, fetchRanking, removeFriend, onClose }) {
+  const [rows, setRows] = useState(null); // ranking rows (you + friends), sorted by wins
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);   // { ok, text }
@@ -12,7 +13,7 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
   const friendCode = profile?.friendCode || null;
   const friendLink = friendCode ? `${window.location.origin}/?friend=${friendCode}` : '';
 
-  const load = () => { listFriends().then(setFriends).catch(() => setFriends([])); };
+  const load = () => { fetchRanking().then(setRows).catch(() => setRows([])); };
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const share = async () => {
@@ -33,8 +34,10 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
 
   const remove = async (id) => {
     await removeFriend(id);
-    setFriends((prev) => (prev || []).filter((f) => f.user_id !== id));
+    setRows((prev) => (prev || []).filter((f) => f.user_id !== id));
   };
+
+  const friendCount = rows ? rows.filter((r) => r.user_id !== myUserId).length : 0;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
@@ -45,7 +48,7 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
       >
         <div style={{ background: 'rgba(5,40,60,0.9)', padding: '8px 12px', borderBottom: '1px solid rgba(0,240,255,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Users className="w-4 h-4 text-cyan-400" />
-          <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">Amigos</span>
+          <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">Amigos y ranking</span>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
@@ -58,7 +61,7 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
                 readOnly
                 value={friendLink || 'Generando…'}
                 onFocus={(e) => e.target.select()}
-                className="flex-1 bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 focus:outline-none focus:border-cyan-500"
+                className="flex-1 bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 focus:outline-none focus:border-cyan-500 min-w-0"
               />
               <button
                 onClick={share}
@@ -69,7 +72,7 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
                 {copied ? '¡Copiado!' : 'Compartir'}
               </button>
             </div>
-            <p className="font-mono text-[9px] text-gray-600 mt-1">Compártelo; quien lo abra te añade al instante (código: <span className="text-cyan-400">{friendCode || '…'}</span>).</p>
+            <p className="font-mono text-[9px] text-gray-600 mt-1">Quien abra tu enlace te añade al instante (código: <span className="text-cyan-400">{friendCode || '…'}</span>).</p>
           </div>
 
           {/* Add by code */}
@@ -81,7 +84,7 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="Ej. AM7K9"
                 maxLength={6}
-                className="flex-1 bg-[#121625] border border-slate-800 text-cyan-400 font-tactical text-lg tracking-[4px] text-center p-1.5 rounded focus:outline-none focus:border-cyan-500 uppercase"
+                className="flex-1 min-w-0 bg-[#121625] border border-slate-800 text-cyan-400 font-tactical text-lg tracking-[4px] text-center p-1.5 rounded focus:outline-none focus:border-cyan-500 uppercase"
               />
               <button
                 onClick={add}
@@ -94,22 +97,30 @@ export default function FriendsModal({ profile, addFriendByCode, listFriends, re
             {msg && <p className={`font-mono text-[10px] mt-1 ${msg.ok ? 'text-green-400' : 'text-red-400'}`}>{msg.text}</p>}
           </div>
 
-          {/* Friends list */}
+          {/* Ranking = your circle (you + friends), sorted by wins */}
           <div>
-            <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Tu círculo</label>
+            <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">🏆 Ranking · tu círculo{friendCount > 0 ? ` (${friendCount} amigo${friendCount !== 1 ? 's' : ''})` : ''}</label>
             <div className="flex flex-col gap-1.5 mt-1">
-              {friends === null ? (
+              {rows === null ? (
                 <div className="flex items-center justify-center gap-2 py-4 text-cyan-400 font-mono text-[11px]"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>
-              ) : friends.length === 0 ? (
-                <p className="font-mono text-[11px] text-gray-500 text-center py-4">Aún no tienes amigos. Comparte tu enlace 👆</p>
-              ) : friends.map((f) => (
-                <div key={f.user_id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5">
-                  <span className="text-lg shrink-0">{f.avatar || '🎖️'}</span>
-                  <span className="font-tactical text-[12px] text-white flex-1 truncate">{f.nickname || 'Comandante'}</span>
-                  <span className="font-mono text-[10px] text-yellow-400 shrink-0">🏆 {f.games_won}</span>
-                  <button onClick={() => remove(f.user_id)} title="Eliminar amigo" className="p-1 text-slate-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              ))}
+              ) : rows.length === 0 ? (
+                <p className="font-mono text-[11px] text-gray-500 text-center py-4">Comparte tu enlace para tener con quién competir 👆</p>
+              ) : rows.map((f, i) => {
+                const isMe = f.user_id === myUserId;
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+                return (
+                  <div key={f.user_id} className={`flex items-center gap-2 rounded px-2 py-1.5 border ${isMe ? 'border-cyan-500/50 bg-cyan-950/20' : 'border-slate-900 bg-[#0d101a]'}`}>
+                    <span className="font-tactical text-xs text-gray-400 w-6 text-center shrink-0">{medal}</span>
+                    <span className="text-lg shrink-0">{f.avatar || '🎖️'}</span>
+                    <span className={`font-tactical text-[12px] flex-1 truncate ${isMe ? 'text-cyan-300' : 'text-white'}`}>{f.nickname || 'Comandante'}{isMe ? ' (tú)' : ''}</span>
+                    <span className="font-mono text-[11px] text-yellow-400 shrink-0">🏆 {f.games_won}</span>
+                    <span className="font-mono text-[9px] text-gray-500 shrink-0">/ {f.games_played}</span>
+                    {!isMe && (
+                      <button onClick={() => remove(f.user_id)} title="Eliminar amigo" className="p-1 text-slate-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
