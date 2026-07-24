@@ -288,7 +288,7 @@ grant  select (user_id, nickname, avatar, games_played, games_won, updated_at, f
 
 -- Poner/cambiar la contraseña de MI perfil.
 create or replace function public.battlechis_set_password(p_password text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then raise exception 'NO_AUTH'; end if;
   if length(coalesce(p_password, '')) < 3 then raise exception 'SHORT'; end if;
@@ -303,7 +303,7 @@ grant execute on function public.battlechis_set_password(text) to authenticated;
 -- Traspasa el perfil (y sus amistades/invitaciones) a la identidad que llama.
 create or replace function public.battlechis_claim_profile(p_name text, p_password text)
 returns table(nickname text, avatar text)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_caller uuid := auth.uid();
   v_src    uuid;
