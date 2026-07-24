@@ -555,6 +555,26 @@ export function useMultiplayer() {
     }
   }, [pushSupported, ensureAuth]);
 
+  // ── Turn OFF notifications on this device (unsubscribe + drop the row) ──
+  const disablePush = useCallback(async () => {
+    if (!pushSupported) return { ok: false, msg: 'No soportado.' };
+    try {
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('SW_TIMEOUT')), 6000)),
+      ]).catch(() => null);
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) { try { await sub.unsubscribe(); } catch { /* ignore */ } }
+      }
+      if (isSupabaseConfigured) {
+        try { const uid = await ensureAuth(); await supabase.from(PUSH_TABLE).delete().eq('user_id', uid); } catch { /* ignore */ }
+      }
+      setPushEnabled(false);
+      return { ok: true };
+    } catch (e) { return { ok: false, msg: e.message }; }
+  }, [pushSupported, ensureAuth]);
+
   // ── Fire a push to a specific user via the edge function (no webhook needed) ──
   const notify = useCallback(async (payload) => {
     if (!isSupabaseConfigured || !payload?.userId) return;
@@ -646,6 +666,7 @@ export function useMultiplayer() {
     listMyGames,
     deleteGame,
     enablePush,
+    disablePush,
     pushSupported,
     pushEnabled,
     notify,

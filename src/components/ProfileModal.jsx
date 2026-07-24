@@ -5,7 +5,7 @@ import { Settings, Check, X, Loader2, LogIn } from 'lucide-react';
 // password + avatar, or log in with name + password) plus notifications.
 const AVATARS = ['🎖️','⭐','🔥','💀','🐉','🦅','🐺','🦁','🐻','🦊','👑','⚔️','🛡️','🚀','⚡','🎯','🐢','🦈','🤖','👽','🐙','🦖'];
 
-export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, pushSupported, pushEnabled, enablePush, onClose }) {
+export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, pushSupported, pushEnabled, enablePush, disablePush, onClose }) {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushMsg, setPushMsg] = useState(null);
   const hasProfile = !!profile?.nickname;
@@ -138,18 +138,21 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
                 <button
                   type="button"
                   onClick={async () => {
-                    if (pushEnabled || pushBusy) return;
+                    if (pushBusy) return;
+                    const wasEnabled = pushEnabled;
                     setPushBusy(true); setPushMsg(null);
-                    const r = await enablePush();
+                    const r = wasEnabled ? await disablePush() : await enablePush();
                     setPushBusy(false);
-                    setPushMsg(r.ok ? { ok: true, text: '✓ Activadas' } : { ok: false, text: r.msg });
+                    setPushMsg(r.ok
+                      ? { ok: true, text: wasEnabled ? 'Desactivadas' : '✓ Activadas' }
+                      : { ok: false, text: r.msg });
                   }}
                   className="flex items-center gap-2 mt-1 w-full text-left"
                 >
                   <span className={`w-5 h-5 rounded border flex items-center justify-center text-[12px] shrink-0 ${pushEnabled ? 'bg-green-600 border-green-500 text-white' : 'border-slate-600 text-transparent'}`}>
                     {pushBusy ? <Loader2 className="w-3 h-3 animate-spin text-cyan-400" /> : '✓'}
                   </span>
-                  <span className="font-mono text-[11px] text-white">Activar notificaciones</span>
+                  <span className="font-mono text-[11px] text-white">{pushEnabled ? 'Notificaciones activadas' : 'Activar notificaciones'}</span>
                 </button>
                 <p className="font-mono text-[9px] text-gray-600 mt-1">Avisos de tu turno, ataques e invitaciones aunque cierres la app.</p>
                 {pushMsg && <p className={`font-mono text-[9px] mt-1 ${pushMsg.ok ? 'text-green-400' : 'text-red-400'}`}>{pushMsg.text}</p>}

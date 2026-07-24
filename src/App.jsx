@@ -475,6 +475,7 @@ export default function App() {
               pushSupported={mp.pushSupported}
               pushEnabled={mp.pushEnabled}
               enablePush={mp.enablePush}
+              disablePush={mp.disablePush}
               onClose={() => { setShowProfile(false); setOnboarded(true); }}
             />
           )}
