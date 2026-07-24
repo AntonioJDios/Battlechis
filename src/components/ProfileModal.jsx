@@ -10,17 +10,29 @@ export default function ProfileModal({ profile, onSave, onClose }) {
   const [avatar, setAvatar] = useState(profile?.avatar || '🎖️');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const initial = React.useRef({ nickname: profile?.nickname || '', avatar: profile?.avatar || '🎖️' });
+  const dirty = nickname !== initial.current.nickname || avatar !== initial.current.avatar;
+
+  // Don't lose edits by tapping outside without saving.
+  const tryClose = () => {
+    if (dirty && !window.confirm('Tienes cambios sin guardar en tu perfil. ¿Cerrar sin guardar?')) return;
+    onClose();
+  };
 
   const save = async () => {
     setBusy(true); setErr(null);
     const r = await onSave({ nickname, avatar });
     setBusy(false);
     if (r && r.ok === false) { setErr(r.msg || 'No se pudo guardar.'); return; }
-    onClose();
+    initial.current = { nickname: (nickname || '').trim() || 'Comandante', avatar };
+    setSaved(true);
+    setTimeout(onClose, 700);
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={tryClose}>
       <div
         className="animate-fade-in"
         onClick={(e) => e.stopPropagation()}
@@ -29,7 +41,7 @@ export default function ProfileModal({ profile, onSave, onClose }) {
         <div style={{ background: 'rgba(5,40,60,0.9)', padding: '8px 12px', borderBottom: '1px solid rgba(0,240,255,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <UserRound className="w-4 h-4 text-cyan-400" />
           <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">Tu perfil</span>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={tryClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -66,10 +78,10 @@ export default function ProfileModal({ profile, onSave, onClose }) {
 
           <button
             onClick={save}
-            disabled={busy}
-            className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2.5 text-xs font-bold flex items-center justify-center gap-2"
+            disabled={busy || saved}
+            className={`btn-tactical py-2.5 text-xs font-bold flex items-center justify-center gap-2 ${saved ? 'border-green-400 text-green-400 bg-green-950/20' : 'border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20'}`}
           >
-            <Check className="w-4 h-4" /> {busy ? 'Guardando…' : 'Guardar perfil'}
+            <Check className="w-4 h-4" /> {saved ? '✓ Guardado en el servidor' : busy ? 'Guardando…' : 'Guardar perfil'}
           </button>
         </div>
       </div>

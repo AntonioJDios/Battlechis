@@ -126,12 +126,19 @@ export function useMultiplayer() {
     const next = { ...profileRef.current, nickname: (nickname ?? '').trim() || 'Comandante', avatar: avatar || DEFAULT_AVATAR };
     setProfile(next);
     try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
-    if (!isSupabaseConfigured) return { ok: true };
+    if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado: el perfil solo se guarda en este dispositivo.' };
     try {
       const uid = await ensureAuth();
       const { error: upErr } = await supabase.from(PROFILE_TABLE)
         .upsert({ user_id: uid, nickname: next.nickname, avatar: next.avatar, updated_at: new Date().toISOString() });
       if (upErr) return { ok: false, msg: upErr.message };
+      // Read it back so we only report success once it's really in the DB.
+      const { data: check, error: chkErr } = await supabase.from(PROFILE_TABLE)
+        .select('nickname, avatar').eq('user_id', uid).maybeSingle();
+      if (chkErr) return { ok: false, msg: chkErr.message };
+      if (!check || check.nickname !== next.nickname || check.avatar !== next.avatar) {
+        return { ok: false, msg: 'No se pudo confirmar el guardado en el servidor.' };
+      }
     } catch (e) { return { ok: false, msg: e.message }; }
     return { ok: true };
   }, [ensureAuth]);
