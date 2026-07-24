@@ -314,9 +314,9 @@ begin
   if v_src is null then raise exception 'INVALID'; end if;
   if v_src <> v_caller then
     -- Suelta el perfil (vacío) de la identidad actual para poder adoptar el otro.
+    -- (La suscripción push de este dispositivo se conserva: sigue siendo válida.)
     delete from public.battlechis_friends      where user_id = v_caller or friend_id = v_caller;
     delete from public.battlechis_game_invites where from_user = v_caller or to_user = v_caller;
-    delete from public.battlechis_push         where user_id = v_caller;
     delete from public.battlechis_profiles     where user_id = v_caller;
     -- Reasigna el perfil de origen (y sus relaciones) a la identidad actual.
     update public.battlechis_profiles     set user_id  = v_caller where user_id  = v_src;
