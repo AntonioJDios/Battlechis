@@ -505,7 +505,11 @@ export default function App() {
                 <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 40 }} className="flex items-center gap-2">
                   {mp.pushSupported && (
                     <button
-                      onClick={async () => { const r = await mp.enablePush(); if (!r.ok) alert(`No se pudieron activar los avisos: ${r.msg}`); }}
+                      onClick={async () => {
+                        if (mp.pushEnabled) { alert('🔔 Los avisos ya están activados en este dispositivo.'); return; }
+                        const r = await mp.enablePush();
+                        alert(r.ok ? '🔔 Avisos activados: te avisaremos de tu turno, ataques e invitaciones aunque cierres la app.' : `No se pudieron activar: ${r.msg}`);
+                      }}
                       title={mp.pushEnabled ? 'Avisos activados' : 'Activar avisos'}
                       className={`p-2 rounded-full border transition-all ${mp.pushEnabled ? 'border-green-500/60 text-green-300 bg-green-950/40' : 'border-slate-700 text-slate-400 bg-[#0d101a]/80 hover:border-amber-500/60 hover:text-amber-300'}`}
                     >
