@@ -23,7 +23,15 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   const [localError, setLocalError] = useState(null);
   const [foundGame, setFoundGame] = useState(null); // game row looked up by code
   const [myGames, setMyGames] = useState(null); // in-progress games list (null = not loaded)
+  const [friends, setFriends] = useState(null); // friend circle (for inviting)
+  const [invited, setInvited] = useState({});   // friendId -> true once a push invite is sent
   const linkRef = React.useRef(null);
+
+  // Load the friend circle when we enter the waiting room (to invite them).
+  useEffect(() => {
+    if (view !== 'waiting' || !mp.available) return;
+    mp.listFriends().then(setFriends).catch(() => setFriends([]));
+  }, [view, mp.available, mp.listFriends]);
 
   // Load this device's unfinished games.
   const loadMyGames = async () => {
@@ -222,6 +230,43 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
               ))}
             </div>
           </div>
+
+          {/* Invite friends (push) */}
+          {(() => {
+            const seatedIds = new Set(seats.filter((s) => s.userId).map((s) => s.userId));
+            const hasFreeSeat = seats.some((s) => s.type === 'human' && !s.userId);
+            const invitable = (friends || []).filter((f) => !seatedIds.has(f.user_id));
+            if (!hasFreeSeat || (friends && invitable.length === 0 && friends.length === 0)) return null;
+            return (
+              <div className="border-t border-slate-800 pt-3">
+                <div className="font-tactical text-[10px] text-gray-400 uppercase tracking-wider mb-2">Invitar amigos</div>
+                {friends === null ? (
+                  <div className="flex items-center gap-2 text-cyan-400 font-mono text-[11px] py-1"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>
+                ) : invitable.length === 0 ? (
+                  <p className="font-mono text-[10px] text-gray-500">
+                    {friends.length === 0 ? 'Aún no tienes amigos. Añádelos desde la portada 👥' : 'Tus amigos ya están en la partida.'}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {invitable.map((f) => (
+                      <div key={f.user_id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5">
+                        <span className="text-base shrink-0">{f.avatar || '🎖️'}</span>
+                        <span className="font-tactical text-[11px] text-white flex-1 truncate">{f.nickname || 'Comandante'}</span>
+                        <button
+                          onClick={async () => { await mp.inviteFriend(f.user_id, game.code); setInvited((p) => ({ ...p, [f.user_id]: true })); }}
+                          disabled={invited[f.user_id]}
+                          className={`py-1 px-2.5 text-[10px] font-bold rounded border flex items-center gap-1 shrink-0 ${invited[f.user_id] ? 'border-green-500/40 text-green-400 bg-green-950/20' : 'border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30'}`}
+                        >
+                          {invited[f.user_id] ? '✓ Invitado' : '🎮 Invitar'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="font-mono text-[9px] text-gray-600 mt-1.5">Recibirá un aviso push (si tiene las notificaciones activadas) con el enlace para unirse.</p>
+              </div>
+            );
+          })()}
 
           {(() => {
             const humanSeats = seats.filter((s) => s.type === 'human');

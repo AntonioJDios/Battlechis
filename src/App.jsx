@@ -17,6 +17,7 @@ import DefenseModal from './components/DefenseModal';
 import Lobby from './components/Lobby';
 import ProfileModal from './components/ProfileModal';
 import RankingModal from './components/RankingModal';
+import FriendsModal from './components/FriendsModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi } from 'lucide-react';
@@ -197,9 +198,12 @@ export default function App() {
   const [homeScreen, setHomeScreen] = useState(true);
   const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
 
-  // ── Profile / ranking ──
+  // ── Profile / ranking / friends ──
   const [showProfile, setShowProfile] = useState(false);
   const [showRanking, setShowRanking] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
+  const [friendToast, setFriendToast] = useState(null); // { ok, text }
+  const friendLinkRef = React.useRef(false);
 
   // ── PWA install ──
   const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/desktop Chrome
@@ -235,6 +239,22 @@ export default function App() {
     catch { return ''; }
   })();
   const [showLobby, setShowLobby] = useState(Boolean(initialJoinCode));
+
+  // If the URL carries ?friend=CODE, add that friend (mutual, instant) and toast.
+  useEffect(() => {
+    if (!mp.available || friendLinkRef.current) return;
+    let friendCode = '';
+    try { friendCode = new URLSearchParams(window.location.search).get('friend') || ''; } catch { /* ignore */ }
+    if (!friendCode) return;
+    friendLinkRef.current = true;
+    try { const u = new URL(window.location.href); u.searchParams.delete('friend'); window.history.replaceState({}, '', u); } catch { /* ignore */ }
+    mp.addFriendByCode(friendCode).then((r) => {
+      setFriendToast(r.ok
+        ? { ok: true, text: `¡Ahora eres amigo de ${r.friend?.nickname || 'tu amigo'}! ${r.friend?.avatar || ''}` }
+        : { ok: false, text: r.msg });
+      setTimeout(() => setFriendToast(null), 4500);
+    });
+  }, [mp.available, mp.addFriendByCode]);
 
   // Seats config for the lobby, derived from the setup screen (faction + human/bot).
   const seatsConfig = setupPlayers.map((p) => ({
@@ -435,6 +455,22 @@ export default function App() {
           {showRanking && (
             <RankingModal fetchRanking={mp.fetchRanking} myUserId={mp.userId} onClose={() => setShowRanking(false)} />
           )}
+          {showFriends && (
+            <FriendsModal
+              profile={mp.profile}
+              addFriendByCode={mp.addFriendByCode}
+              listFriends={mp.listFriends}
+              removeFriend={mp.removeFriend}
+              onClose={() => setShowFriends(false)}
+            />
+          )}
+          {friendToast && (
+            <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 900 }}>
+              <div className={`px-4 py-2 rounded-lg border font-mono text-[11px] shadow-lg ${friendToast.ok ? 'border-green-500/50 bg-green-950/90 text-green-300' : 'border-red-500/50 bg-red-950/90 text-red-300'}`}>
+                {friendToast.text}
+              </div>
+            </div>
+          )}
 
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
@@ -467,6 +503,14 @@ export default function App() {
                     className="btn-tactical border-slate-500 text-slate-300 bg-slate-800/30 font-bold tracking-widest text-sm py-2.5 hover:bg-slate-700/40"
                   >
                     📂 MIS PARTIDAS
+                  </button>
+                )}
+                {mp.available && (
+                  <button
+                    onClick={() => setShowFriends(true)}
+                    className="btn-tactical border-cyan-500/50 text-cyan-300 bg-cyan-950/20 font-bold tracking-widest text-sm py-2.5 hover:bg-cyan-900/30"
+                  >
+                    👥 AMIGOS
                   </button>
                 )}
                 {mp.available && (

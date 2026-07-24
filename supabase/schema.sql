@@ -165,6 +165,42 @@ create policy battlechis_profiles_write
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+-- Código de amigo (para invitar): se rellena desde la app la primera vez.
+alter table public.battlechis_profiles add column if not exists friend_code text;
+create unique index if not exists battlechis_profiles_friend_code_idx
+  on public.battlechis_profiles (friend_code);
+
+-- ── Amistades (mutuas): fila dirigida A→B; se consideran amigos en ambos sentidos ──
+create table if not exists public.battlechis_friends (
+  user_id    uuid not null,        -- quien añadió
+  friend_id  uuid not null,        -- a quién
+  created_at timestamptz not null default now(),
+  primary key (user_id, friend_id)
+);
+
+alter table public.battlechis_friends enable row level security;
+
+-- Ves las amistades en las que participas (las que creaste y las que te crearon).
+drop policy if exists battlechis_friends_select on public.battlechis_friends;
+create policy battlechis_friends_select
+  on public.battlechis_friends for select
+  to authenticated
+  using (user_id = auth.uid() or friend_id = auth.uid());
+
+-- Solo creas amistades donde TÚ eres quien añade.
+drop policy if exists battlechis_friends_insert on public.battlechis_friends;
+create policy battlechis_friends_insert
+  on public.battlechis_friends for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+-- Puedes borrar cualquier amistad en la que participes (des-amigar).
+drop policy if exists battlechis_friends_delete on public.battlechis_friends;
+create policy battlechis_friends_delete
+  on public.battlechis_friends for delete
+  to authenticated
+  using (user_id = auth.uid() or friend_id = auth.uid());
+
 -- Registrar el resultado de una partida para el usuario que llama (suma 1 a
 -- jugadas, y 1 a ganadas si `won`). Atómico y respeta RLS (security invoker).
 create or replace function public.battlechis_record_result(won boolean)
