@@ -327,6 +327,26 @@ begin
     update public.battlechis_friends      set friend_id = v_caller where friend_id = v_src;
     update public.battlechis_game_invites set from_user = v_caller where from_user = v_src;
     update public.battlechis_game_invites set to_user   = v_caller where to_user   = v_src;
+    -- Reasigna también las PARTIDAS: las partidas pertenecen al USUARIO, no al
+    -- móvil. Migramos el creador (host_id), la lista de miembros (member_ids) y
+    -- el uid guardado en cada asiento (state.seats[].userId), para que puedas
+    -- recuperar tus partidas al entrar con tu perfil desde otro dispositivo.
+    update public.battlechis_games
+       set host_id    = case when host_id = v_src then v_caller else host_id end,
+           member_ids = (select array(select distinct e
+                                        from unnest(array_replace(member_ids, v_src, v_caller)) as e))
+     where v_src = any(member_ids) or host_id = v_src;
+    update public.battlechis_games g
+       set state = jsonb_set(
+             g.state, '{seats}',
+             (select jsonb_agg(
+                       case when seat->>'userId' = v_src::text
+                            then jsonb_set(seat, '{userId}', to_jsonb(v_caller::text))
+                            else seat end)
+                from jsonb_array_elements(g.state->'seats') as seat))
+     where g.state ? 'seats'
+       and exists (select 1 from jsonb_array_elements(g.state->'seats') s
+                   where s->>'userId' = v_src::text);
   end if;
   return query select p.nickname, p.avatar from public.battlechis_profiles p where p.user_id = v_caller;
 end;
