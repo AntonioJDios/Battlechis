@@ -310,8 +310,10 @@ declare
   v_src    uuid;
 begin
   if v_caller is null then raise exception 'NO_AUTH'; end if;
-  select user_id into v_src from public.battlechis_profiles
-    where lower(nickname) = lower(p_name) and pass_hash is not null and pass_hash = crypt(p_password, pass_hash);
+  -- Alias the table: an unqualified `nickname` would clash with the RETURNS
+  -- TABLE output column of the same name ("nickname is ambiguous").
+  select pr.user_id into v_src from public.battlechis_profiles pr
+    where lower(pr.nickname) = lower(p_name) and pr.pass_hash is not null and pr.pass_hash = crypt(p_password, pr.pass_hash);
   if v_src is null then raise exception 'INVALID'; end if;
   if v_src <> v_caller then
     -- Suelta el perfil (vacío) de la identidad actual para poder adoptar el otro.
