@@ -36,8 +36,10 @@ export default function SurpriseModal({ surpriseState, onDraw, players, currentT
     SoundManager.playRoll?.();
 
     setTimeout(() => {
-      const deck = buildSurpriseDeck(brutalCards);
-      const drawn = deck[Math.floor(Math.random() * deck.length)];
+      // The card was already drawn from the shuffled deck when we landed here.
+      // (Fallback for a resumed older game that has no pre-drawn card.)
+      const drawn = surpriseState.card
+        || (() => { const deck = buildSurpriseDeck(brutalCards); return deck[Math.floor(Math.random() * deck.length)]; })();
       setCard(drawn);
       setIsDrawing(false);
       SoundManager.playClick?.();

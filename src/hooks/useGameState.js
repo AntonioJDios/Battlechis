@@ -1,6 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { generateBoardGraph, getNodesAtDistance, findShortestPath, FACTIONS } from '../utils/boardGraph';
 import { SoundManager } from '../components/SoundManager';
+
+// Fisher–Yates shuffle (returns a new array) — used to shuffle the surprise deck.
+export function shuffleDeck(cards) {
+  const a = [...cards];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 // Surprise card pool (Monopoly-style): troops gained/lost by the platoon landing on the cell
 export const SURPRISE_CARDS = [+5, +3, +2, +1, -1, -2, -3];
@@ -64,7 +74,22 @@ export function useGameState(online = null) {
   // Modals state
   const [combatState, setCombatState] = useState(null);
   const [conquestState, setConquestState] = useState(null);
-  const [surpriseState, setSurpriseState] = useState(null); // {nodeId} — landing on a surprise cell
+  const [surpriseState, setSurpriseState] = useState(null); // {nodeId, card} — landing on a surprise cell
+  // Surprise DECK: shuffled once, drawn in order (no immediate repeats), reshuffled
+  // when empty. Lives in state so it syncs online and every client agrees.
+  const [surpriseDeck, setSurpriseDeck] = useState([]);
+  const deckRef = useRef([]);
+  useEffect(() => { deckRef.current = surpriseDeck; }, [surpriseDeck]);
+  // Draw the top card (refilling+reshuffling a fresh deck when exhausted).
+  const drawSurpriseCard = useCallback(() => {
+    let d = deckRef.current;
+    if (!d || d.length === 0) d = shuffleDeck(buildSurpriseDeck(brutalCards));
+    const card = d[0];
+    const rest = d.slice(1);
+    deckRef.current = rest;
+    setSurpriseDeck(rest);
+    return card;
+  }, [brutalCards]);
   const [siegeState, setSiegeState] = useState(null); // {attackerNodeId, defenderNodeId, attackForce} — shield siege before combat
   const [negotiationState, setNegotiationState] = useState(null); // road-crossing negotiation
   const [pendingAdvance, setPendingAdvance] = useState(null); // {fromId, toId} — continue after winning a block
@@ -93,6 +118,10 @@ export function useGameState(online = null) {
     const brutal = !!options.brutalCards;
     setBoardSize(size);
     setBrutalCards(brutal);
+    // Shuffle the surprise deck once at the start (drawn in order thereafter).
+    const freshDeck = shuffleDeck(buildSurpriseDeck(brutal));
+    deckRef.current = freshDeck;
+    setSurpriseDeck(freshDeck);
     // Build from a freshly-generated graph of the chosen size (state update is async).
     const g = generateBoardGraph(size);
 
@@ -709,7 +738,7 @@ export function useGameState(online = null) {
         addLog(`${cp.name.toUpperCase()} desplazó pelotón a ${destNode.name}.`, 'info');
         if (destNode.type === 'surprise') {
           setPhase('SURPRISE');
-          setSurpriseState({ nodeId: destId });
+          setSurpriseState({ nodeId: destId, card: drawSurpriseCard() }); // top of the shuffled deck
         } else {
           resolvePostMovement(board);
         }
@@ -748,7 +777,7 @@ export function useGameState(online = null) {
     } else {
       initCombat(originId, destId, troops, continueTo);
     }
-  }, [players, currentTurn, boardState, graph, hands, isOnline, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog]);
+  }, [players, currentTurn, boardState, graph, hands, isOnline, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog, drawSurpriseCard]);
 
   // Defender's answer to a Super Defense prompt: 'use' (stop the attack) or 'skip'.
   const respondDefense = useCallback((response) => {
@@ -995,7 +1024,8 @@ export function useGameState(online = null) {
   //     wipe; 👑 nucleo → instant victory. Then continue the turn. ---
   const executeSurpriseDraw = useCallback((card = null) => {
     if (!surpriseState) return;
-    const drawn = card || (() => { const d = buildSurpriseDeck(brutalCards); return d[Math.floor(Math.random() * d.length)]; })();
+    // Use the card already drawn from the shuffled deck when we landed here.
+    const drawn = card || surpriseState.card || (() => { const d = shuffleDeck(buildSurpriseDeck(brutalCards)); return d[0]; })();
     const { nodeId } = surpriseState;
     const currentPlayer = players[currentTurn];
     const nodeName = graph[nodeId]?.name ?? 'casilla sorpresa';
@@ -1635,11 +1665,11 @@ export function useGameState(online = null) {
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
     surpriseState, siegeState, negotiationState, bombState, defenseState,
-    hands, winner, alliances, nucleoData, boardSize, brutalCards,
+    hands, winner, alliances, nucleoData, boardSize, brutalCards, surpriseDeck,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
        surpriseState, siegeState, negotiationState, bombState, defenseState,
-       hands, winner, alliances, nucleoData, boardSize, brutalCards]);
+       hands, winner, alliances, nucleoData, boardSize, brutalCards, surpriseDeck]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1655,6 +1685,7 @@ export function useGameState(online = null) {
     if (snap.combatState !== undefined) setCombatState(snap.combatState);
     if (snap.conquestState !== undefined) setConquestState(snap.conquestState);
     if (snap.surpriseState !== undefined) setSurpriseState(snap.surpriseState);
+    if (snap.surpriseDeck !== undefined) { setSurpriseDeck(snap.surpriseDeck); deckRef.current = snap.surpriseDeck; }
     if (snap.siegeState !== undefined) setSiegeState(snap.siegeState);
     if (snap.negotiationState !== undefined) setNegotiationState(snap.negotiationState);
     if (snap.bombState !== undefined) setBombState(snap.bombState);
