@@ -6,11 +6,11 @@ const RAD_72 = (72 * Math.PI) / 180;
 const RAD_12 = (12 * Math.PI) / 180;
 
 export const FACTIONS = [
-  { id: 0, name: "ALPHA (Crimson)", commander: "Col. Marcus Vance", color: "red", neon: "var(--neon-red)", rgb: "255, 59, 59" },
-  { id: 1, name: "DELTA (Blue Eagle)", commander: "Cmdr. Elena Rostova", color: "blue", neon: "var(--neon-blue)", rgb: "0, 136, 255" },
-  { id: 2, name: "SIGMA (Lightning)", commander: "Maj. Jackson Briggs", color: "yellow", neon: "var(--neon-yellow)", rgb: "255, 208, 0" },
-  { id: 3, name: "GAMMA (Viper)", commander: "Capt. Caleb Stone", color: "green", neon: "var(--neon-green)", rgb: "0, 230, 118" },
-  { id: 4, name: "OMEGA (Eclipse)", commander: "Lt. Valeria Ruiz", color: "purple", neon: "var(--neon-purple)", rgb: "197, 66, 255" }
+  { id: 0, name: "Rojo", commander: "Jugador Rojo", color: "red", neon: "var(--neon-red)", rgb: "255, 59, 59" },
+  { id: 1, name: "Azul", commander: "Jugador Azul", color: "blue", neon: "var(--neon-blue)", rgb: "0, 136, 255" },
+  { id: 2, name: "Amarillo", commander: "Jugador Amarillo", color: "yellow", neon: "var(--neon-yellow)", rgb: "255, 208, 0" },
+  { id: 3, name: "Verde", commander: "Jugador Verde", color: "green", neon: "var(--neon-green)", rgb: "0, 230, 118" },
+  { id: 4, name: "Morado", commander: "Jugador Morado", color: "purple", neon: "var(--neon-purple)", rgb: "197, 66, 255" }
 ];
 
 export const NEUTRAL_BASE_NAMES = [
@@ -78,7 +78,7 @@ export function generateBoardGraph(size = 'large') {
     const angle = getHqAngle(i);
     addNode(`hq_${i}`, {
       type: "hq",
-      name: `CUARTEL GENERAL ${FACTIONS[i].color.toUpperCase()} (${FACTIONS[i].name.split(" ")[0]})`,
+      name: `CUARTEL GENERAL ${FACTIONS[i].name.toUpperCase()}`,
       faction: i,
       x: cx + R_hq * Math.cos(angle),
       y: cy + R_hq * Math.sin(angle)

@@ -341,7 +341,7 @@ export default function Board({
                     fontFamily="var(--font-tactical)"
                     letterSpacing="0.5"
                   >
-                    {FACTIONS[node.faction].color.toUpperCase()} HQ
+                    {FACTIONS[node.faction].name.toUpperCase()} HQ
                   </text>
 
                   {/* Troop Counter Badge */}

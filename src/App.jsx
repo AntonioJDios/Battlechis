@@ -179,11 +179,11 @@ export default function App() {
   // Setup lobby state
   const [playerCount, setPlayerCount] = useState(5);
   const [setupPlayers, setSetupPlayers] = useState([
-    { faction: 0, isBot: false, name: "ALPHA (Crimson)" },
-    { faction: 1, isBot: true, name: "DELTA (Blue Eagle)" },
-    { faction: 2, isBot: true, name: "SIGMA (Lightning)" },
-    { faction: 3, isBot: true, name: "GAMMA (Viper)" },
-    { faction: 4, isBot: true, name: "OMEGA (Eclipse)" }
+    { faction: 0, isBot: false, name: "Jugador Rojo" },
+    { faction: 1, isBot: true, name: "Jugador Azul" },
+    { faction: 2, isBot: true, name: "Jugador Amarillo" },
+    { faction: 3, isBot: true, name: "Jugador Verde" },
+    { faction: 4, isBot: true, name: "Jugador Morado" }
   ]);
   const [isMuted, setIsMuted] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -396,7 +396,7 @@ export default function App() {
         newPlayers.push({
           faction: unusedFaction,
           isBot: true,
-          name: FACTIONS[unusedFaction].name
+          name: FACTIONS[unusedFaction].commander
         });
       }
       setSetupPlayers(newPlayers);
