@@ -122,12 +122,13 @@ create policy battlechis_push_all
 -- (La Edge Function lee todas las filas con la service_role, que ignora RLS.)
 
 -- ── Limpieza de partidas viejas (para que la tabla no crezca sin fin) ──
--- Borra partidas terminadas (>1 día) y partidas abandonadas sin actividad (>7 días).
+-- Borra SOLO terminadas (>1 día) y lobbies en espera abandonados (>2 días).
+-- NUNCA borra partidas 'playing' (en curso), por muy paradas que estén.
 create or replace function public.battlechis_cleanup()
 returns void language sql security definer as $$
   delete from public.battlechis_games
   where (status = 'finished' and updated_at < now() - interval '1 day')
-     or (updated_at < now() - interval '7 days');
+     or (status = 'waiting'  and updated_at < now() - interval '2 days');
 $$;
 
 -- Limpieza AUTOMÁTICA diaria (requiere la extensión pg_cron):
