@@ -425,11 +425,12 @@ export function useMultiplayer() {
     try {
       const uid = await ensureAuth();
       const code = makeCode();
-      // Assign the host to the first human seat.
-      const firstHuman = seats.findIndex((x) => x.type === 'human');
-      const filledSeats = seats.map((s, i) => (
-        i === firstHuman
-          ? { ...s, userId: uid, name: profileRef.current?.nickname || s.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR }
+      // The host's device drives every LOCAL human seat (hotseat), so claim them
+      // all for this uid. ONLINE human seats stay open for others to join.
+      const av = profileRef.current?.avatar || DEFAULT_AVATAR;
+      const filledSeats = seats.map((s) => (
+        s.type === 'human' && !s.online
+          ? { ...s, userId: uid, avatar: av }
           : { ...s, userId: null }
       ));
       const state = { ...initialState, seats: filledSeats };

@@ -19,7 +19,7 @@ import ProfileModal from './components/ProfileModal';
 import FriendsModal from './components/FriendsModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
-import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi } from 'lucide-react';
+import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X } from 'lucide-react';
 
 // Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
 // does NOT preserve key order — compares equal to our locally-built snapshot.
@@ -193,6 +193,8 @@ export default function App() {
   // Game options chosen by the creator
   const [boardSizeOpt, setBoardSizeOpt] = useState('large'); // 'large' | 'small'
   const [brutalOpt, setBrutalOpt] = useState(false); // brutal cards (bomb + instant núcleo win)
+  const [showGameConfig, setShowGameConfig] = useState(false); // board+cards popup
+  const [seatConfigIdx, setSeatConfigIdx] = useState(null); // which seat's role popup is open
   // Landing page: show "Jugar / Instalar" first; deep-link joins skip straight in.
   const [homeScreen, setHomeScreen] = useState(true);
   const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
@@ -415,17 +417,49 @@ export default function App() {
     SoundManager.playClick();
   };
 
-  const handleStartGame = () => {
-    // Validate no duplicate factions
-    const factionsUsed = setupPlayers.map(p => p.faction);
-    const hasDuplicates = new Set(factionsUsed).size !== factionsUsed.length;
-    
-    if (hasDuplicates) {
-      alert("ERROR: Cada comandante debe liderar una facción única.");
+  // Set a seat's role from the per-player popup. role: 'bot' | 'local' | 'online'
+  // (local covers "yo" and "invitado" — the difference is just the name).
+  const setSeatRole = (index, role) => {
+    const updated = setupPlayers.map((p, i) => {
+      if (i !== index) return p;
+      if (role === 'bot') return { ...p, isBot: true, online: false };
+      if (role === 'online') return { ...p, isBot: false, online: true, name: 'Online' };
+      // local: keep a real name (fall back to my profile when coming from bot/online)
+      const name = (!p.isBot && !p.online && p.name) ? p.name : (mp.profile?.nickname || FACTIONS[p.faction].commander);
+      return { ...p, isBot: false, online: false, name };
+    });
+    setSetupPlayers(updated);
+    SoundManager.playClick();
+  };
+
+  // Single entry point: the engine decides local vs online from the seats.
+  const handleCreateGame = () => {
+    const factionsUsed = setupPlayers.map((p) => p.faction);
+    if (new Set(factionsUsed).size !== factionsUsed.length) {
+      alert('ERROR: Cada jugador debe tener un color único.');
       return;
     }
-
-    startGame(setupPlayers, { boardSize: boardSizeOpt, brutalCards: brutalOpt });
+    if (!setupPlayers.some((p) => !p.isBot)) {
+      alert('Pon al menos un jugador humano.');
+      return;
+    }
+    const hasOnline = setupPlayers.some((p) => !p.isBot && p.online);
+    if (hasOnline) {
+      // Online game: create the row (local seats pre-claimed, online seats open)
+      // and jump to the waiting room to invite the online players.
+      const seats = setupPlayers.map((p) => ({
+        faction: p.faction,
+        type: p.isBot ? 'bot' : 'human',
+        online: !!p.online,
+        name: p.name,
+      }));
+      mp.createGame({ phase: 'LOBBY' }, seats)
+        .then(() => { setLobbyInitialView('waiting'); setShowLobby(true); })
+        .catch(() => {});
+    } else {
+      // Local hotseat game.
+      startGame(setupPlayers, { boardSize: boardSizeOpt, brutalCards: brutalOpt });
+    }
   };
 
   const toggleMute = () => {
@@ -563,10 +597,13 @@ export default function App() {
               </div>
             </div>
           ) : (() => {
-            const total = setupPlayers.length;
-            const step = Math.min(wizardIdx, total);          // clamp if count shrank
-            const onReview = step >= total;
-            const player = setupPlayers[step];
+            const hasOnline = setupPlayers.some((p) => !p.isBot && p.online);
+            const roleBadge = (p) => p.isBot
+              ? { txt: '🤖 IA', cls: 'text-amber-400 bg-amber-950/30' }
+              : p.online
+                ? { txt: '📶 Online', cls: 'text-cyan-300 bg-cyan-950/40' }
+                : { txt: '👤 Local', cls: 'text-green-400 bg-green-950/30' };
+            const seat = seatConfigIdx !== null ? setupPlayers[seatConfigIdx] : null;
 
             return (
               <div className="w-full max-w-lg mx-auto">
@@ -584,7 +621,7 @@ export default function App() {
                     {[4, 5].map(count => (
                       <button
                         key={count}
-                        onClick={() => { handlePlayerCountChange(count); setWizardIdx(0); }}
+                        onClick={() => handlePlayerCountChange(count)}
                         className={`px-3 py-1.5 font-tactical text-xs border font-bold transition-all ${
                           playerCount === count
                             ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
@@ -598,136 +635,127 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Progress dots */}
-                <div className="flex items-center justify-center gap-1.5 mb-3">
-                  {setupPlayers.map((_, i) => (
-                    <div key={i}
-                      className="rounded-full transition-all"
-                      style={{
-                        width: i === step ? 22 : 8, height: 8,
-                        background: i < step || onReview ? '#00e676' : i === step ? '#00f0ff' : 'rgba(255,255,255,0.15)',
-                      }}
-                    />
-                  ))}
+                {/* Player roster — tap a row to set who plays it */}
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {setupPlayers.map((p, i) => {
+                    const b = roleBadge(p);
+                    return (
+                      <button key={i} onClick={() => setSeatConfigIdx(i)}
+                        className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2.5 py-2 hover:border-cyan-500/40 transition-all text-left">
+                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: FACTIONS[p.faction]?.neon, flexShrink: 0 }} />
+                        <span className="font-tactical text-[12px] text-white flex-1 truncate">{p.name}</span>
+                        <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${b.cls}`}>{b.txt}</span>
+                        <Settings className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {!onReview ? (
-                  /* ── One seat at a time ── */
-                  <div className="animate-fade-in">
-                    <div className="text-center mb-3">
-                      <div className="font-tactical text-sm text-white font-bold uppercase tracking-wider">
-                        Puesto {step + 1} <span className="text-gray-600">/ {total}</span>
+                {/* Game config (board + cards) → popup, no scroll */}
+                <button onClick={() => setShowGameConfig(true)}
+                  className="w-full flex items-center justify-center gap-2 border border-slate-700 rounded py-2 mb-3 text-slate-300 font-mono text-[11px] hover:border-cyan-500/40 transition-all">
+                  <Settings className="w-4 h-4" /> Configuración de partida
+                  <span className="text-gray-600 text-[9px]">· {boardSizeOpt === 'large' ? 'Grande' : 'Pequeño'} · {brutalOpt ? 'Brutales' : 'Normales'}</span>
+                </button>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={() => setHomeScreen(true)}
+                    className="btn-tactical border-slate-700 text-slate-400 py-2.5 px-4 text-xs">◀ Volver</button>
+                  <button onClick={handleCreateGame} style={{ flex: 1 }}
+                    className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-wider text-sm py-2.5 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]">
+                    {hasOnline ? <><Wifi className="w-4 h-4 mr-1" /> CREAR ONLINE</> : <><Play className="w-4 h-4 mr-1" /> CREAR PARTIDA</>}
+                  </button>
+                </div>
+                {hasOnline && (
+                  <p className="font-mono text-[9px] text-cyan-400/70 text-center mt-1.5">Hay puestos online → se crea partida online (invitas en la sala de espera).</p>
+                )}
+
+                {/* ── Per-seat role popup ── */}
+                {seat && (
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={() => setSeatConfigIdx(null)}>
+                    <div onClick={(e) => e.stopPropagation()} className="animate-fade-in" style={{ width: 'min(340px, 92vw)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, padding: '14px 16px' }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: FACTIONS[seat.faction]?.neon }} />
+                        <span className="font-tactical text-[12px] text-white flex-1">Jugador {seatConfigIdx + 1}</span>
+                        <button onClick={() => setSeatConfigIdx(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
                       </div>
-                    </div>
 
-                    <div className="flex flex-col gap-2 max-w-md mx-auto">
-                      <select
-                        value={player.faction}
-                        onChange={(e) => handleSetupPlayerChange(step, 'faction', parseInt(e.target.value))}
-                        className="w-full bg-[#121625] border border-slate-800 text-gray-200 font-mono text-sm p-2.5 rounded focus:outline-none focus:border-cyan-500"
-                      >
-                        {FACTIONS.map(f => (
-                          <option key={f.id} value={f.id}
-                            disabled={setupPlayers.some((p, pIdx) => p.faction === f.id && pIdx !== step)}>
-                            {f.name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="text"
-                        placeholder="Nombre del comandante"
-                        value={player.name}
-                        onChange={(e) => handleSetupPlayerChange(step, 'name', e.target.value)}
-                        className="w-full bg-[#121625] border border-slate-800 text-gray-200 font-mono text-sm p-2.5 rounded focus:outline-none focus:border-cyan-500"
-                      />
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSetupPlayerChange(step, 'isBot', false)}
-                          className={`flex-1 py-3 rounded font-tactical text-sm font-black border-2 transition-all ${
-                            !player.isBot
-                              ? 'border-green-400 bg-green-500 text-[#04110a] shadow-[0_0_16px_rgba(0,230,118,0.5)]'
-                              : 'border-slate-700 bg-transparent text-slate-500 hover:text-slate-300'
-                          }`}
-                        >{!player.isBot ? '✓ ' : ''}👤 HUMANO</button>
-                        <button
-                          onClick={() => handleSetupPlayerChange(step, 'isBot', true)}
-                          className={`flex-1 py-3 rounded font-tactical text-sm font-black border-2 transition-all ${
-                            player.isBot
-                              ? 'border-amber-400 bg-amber-500 text-[#1a1204] shadow-[0_0_16px_rgba(245,158,11,0.5)]'
-                              : 'border-slate-700 bg-transparent text-slate-500 hover:text-slate-300'
-                          }`}
-                        >{player.isBot ? '✓ ' : ''}🤖 IA</button>
+                      {/* Color */}
+                      <label className="font-mono text-[9px] text-gray-500 uppercase tracking-wider">Color</label>
+                      <div className="flex gap-2 mt-1 mb-3">
+                        {FACTIONS.map((f) => {
+                          const taken = setupPlayers.some((q, qi) => q.faction === f.id && qi !== seatConfigIdx);
+                          return (
+                            <button key={f.id} disabled={taken} title={f.name}
+                              onClick={() => handleSetupPlayerChange(seatConfigIdx, 'faction', f.id)}
+                              style={{ width: 28, height: 28, borderRadius: '50%', background: f.neon, opacity: taken ? 0.2 : 1, outline: seat.faction === f.id ? '2px solid #fff' : 'none', outlineOffset: 2, cursor: taken ? 'not-allowed' : 'pointer', border: 'none' }} />
+                          );
+                        })}
                       </div>
-                    </div>
 
-                    {/* Nav */}
-                    <div className="flex justify-between items-center gap-3 mt-4 max-w-md mx-auto">
-                      <button
-                        onClick={() => { if (step === 0) setHomeScreen(true); else setWizardIdx(step - 1); }}
-                        className="btn-tactical border-slate-700 text-slate-400 py-2 px-5 text-xs"
-                      >◀ {step === 0 ? 'Inicio' : 'Anterior'}</button>
-                      <button
-                        onClick={() => setWizardIdx(step + 1)}
-                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 px-6 text-xs font-bold"
-                      >{step === total - 1 ? 'Revisar ▶' : 'Siguiente ▶'}</button>
+                      {/* Role */}
+                      <label className="font-mono text-[9px] text-gray-500 uppercase tracking-wider">Quién juega</label>
+                      <div className="grid grid-cols-3 gap-1.5 mt-1">
+                        {[['local', '👤 Local'], ['bot', '🤖 IA'], ...(mp.available ? [['online', '📶 Online']] : [])].map(([role, lbl]) => {
+                          const active = role === 'bot' ? seat.isBot : role === 'online' ? (!seat.isBot && seat.online) : (!seat.isBot && !seat.online);
+                          return (
+                            <button key={role} onClick={() => setSeatRole(seatConfigIdx, role)}
+                              className={`py-2 rounded font-tactical text-[11px] font-bold border transition-all ${active ? 'border-cyan-400 text-cyan-300 bg-cyan-950/40' : 'border-slate-700 text-slate-400 hover:text-white'}`}>{lbl}</button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Name (local humans) */}
+                      {!seat.isBot && !seat.online && (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between">
+                            <label className="font-mono text-[9px] text-gray-500 uppercase tracking-wider">Nombre (tú o invitado)</label>
+                            {mp.profile?.nickname && (
+                              <button onClick={() => handleSetupPlayerChange(seatConfigIdx, 'name', mp.profile.nickname)}
+                                className="font-mono text-[9px] text-cyan-400 hover:text-cyan-300 underline">usar mi perfil</button>
+                            )}
+                          </div>
+                          <input value={seat.name} onChange={(e) => handleSetupPlayerChange(seatConfigIdx, 'name', e.target.value)}
+                            className="w-full bg-[#121625] border border-slate-800 text-white font-mono text-sm p-2 rounded focus:outline-none focus:border-cyan-500 mt-1" />
+                        </div>
+                      )}
+                      {!seat.isBot && seat.online && (
+                        <p className="font-mono text-[9px] text-cyan-400/80 mt-3">Este puesto lo ocupará alguien <strong>online</strong>: le invitas desde la sala de espera al crear la partida.</p>
+                      )}
+
+                      <button onClick={() => setSeatConfigIdx(null)}
+                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 text-xs font-bold w-full mt-4">Hecho</button>
                     </div>
                   </div>
-                ) : (
-                  /* ── Review + launch ── */
-                  <div className="animate-fade-in max-w-md mx-auto">
-                    <div className="flex flex-col gap-1.5 mb-3">
-                      {setupPlayers.map((p, i) => (
-                        <button key={i} onClick={() => setWizardIdx(i)}
-                          className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5 hover:border-slate-700 transition-all text-left">
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[p.faction]?.neon, flexShrink: 0 }} />
-                          <span className="font-tactical text-[11px] text-white flex-1 truncate">{p.name}</span>
-                          <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${p.isBot ? 'text-amber-400 bg-amber-950/30' : 'text-green-400 bg-green-950/30'}`}>
-                            {p.isBot ? '🤖 IA' : '👤 Humano'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                )}
 
-                    {/* Game options: board size + brutal cards */}
-                    <div className="flex flex-col gap-2 mb-2 border-t border-slate-800 pt-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[9px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Tablero</span>
+                {/* ── Game config popup ── */}
+                {showGameConfig && (
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={() => setShowGameConfig(false)}>
+                    <div onClick={(e) => e.stopPropagation()} className="animate-fade-in" style={{ width: 'min(340px, 92vw)', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, padding: '14px 16px' }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Settings className="w-4 h-4 text-cyan-400" />
+                        <span className="font-tactical text-[12px] text-white flex-1">Configuración de partida</span>
+                        <button onClick={() => setShowGameConfig(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                      </div>
+                      <label className="font-mono text-[9px] text-gray-500 uppercase tracking-wider">Tablero</label>
+                      <div className="flex gap-2 mt-1 mb-3">
                         {[['large', 'Grande'], ['small', 'Pequeño ⚡']].map(([val, lbl]) => (
                           <button key={val} onClick={() => setBoardSizeOpt(val)}
-                            className={`flex-1 py-1.5 rounded font-tactical text-[10px] font-bold border transition-all ${
-                              boardSizeOpt === val ? 'border-cyan-400 text-cyan-400 bg-cyan-950/30' : 'border-slate-800 text-gray-500'
-                            }`}>{lbl}</button>
+                            className={`flex-1 py-2 rounded font-tactical text-[11px] font-bold border transition-all ${boardSizeOpt === val ? 'border-cyan-400 text-cyan-400 bg-cyan-950/30' : 'border-slate-800 text-gray-500'}`}>{lbl}</button>
                         ))}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[9px] text-gray-500 uppercase tracking-wider w-16 shrink-0">Cartas</span>
+                      <label className="font-mono text-[9px] text-gray-500 uppercase tracking-wider">Cartas</label>
+                      <div className="flex gap-2 mt-1">
                         {[[false, 'Normales'], [true, 'Brutales 💣👑']].map(([val, lbl]) => (
                           <button key={String(val)} onClick={() => setBrutalOpt(val)}
-                            className={`flex-1 py-1.5 rounded font-tactical text-[10px] font-bold border transition-all ${
-                              brutalOpt === val ? 'border-red-400 text-red-400 bg-red-950/30' : 'border-slate-800 text-gray-500'
-                            }`}>{lbl}</button>
+                            className={`flex-1 py-2 rounded font-tactical text-[11px] font-bold border transition-all ${brutalOpt === val ? 'border-red-400 text-red-400 bg-red-950/30' : 'border-slate-800 text-gray-500'}`}>{lbl}</button>
                         ))}
                       </div>
+                      <button onClick={() => setShowGameConfig(false)}
+                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 py-2 text-xs font-bold w-full mt-4">Hecho</button>
                     </div>
-
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        onClick={handleStartGame}
-                        style={{ flex: 1 }}
-                        className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-wider text-sm py-2.5 px-3 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
-                      ><Play className="w-4 h-4 mr-1" /> LOCAL</button>
-                      <button
-                        onClick={() => setShowLobby(true)}
-                        style={{ flex: 1 }}
-                        className="btn-tactical border-green-400 text-green-400 bg-green-950/20 font-black tracking-wider text-sm py-2.5 px-3 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
-                      ><Wifi className="w-4 h-4 mr-1" /> ONLINE</button>
-                    </div>
-                    <button
-                      onClick={() => setWizardIdx(total - 1)}
-                      className="btn-tactical border-slate-700 text-slate-400 py-2 px-5 text-xs mt-2 w-full"
-                    >◀ Volver a editar</button>
                   </div>
                 )}
               </div>
