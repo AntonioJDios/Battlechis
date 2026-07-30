@@ -289,34 +289,45 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
           })()}
           {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
 
-          {/* Share by link / code — kept compact at the bottom (in-app invites
-              are the main way now). Tap to reveal. */}
+          {/* Share by link / code → popup (no scroll) */}
           <div className="border-t border-slate-800 pt-3">
             <button
-              onClick={() => setShowShare((v) => !v)}
+              onClick={() => setShowShare(true)}
               className="w-full flex items-center justify-center gap-2 text-slate-400 font-mono text-[11px] hover:text-cyan-300 transition-all"
             >
-              <Share2 className="w-4 h-4" /> Compartir por enlace / código {showShare ? '▲' : '▼'}
+              <Share2 className="w-4 h-4" /> Compartir por enlace / código
             </button>
-            {showShare && (
-              <div className="mt-3 flex flex-col items-center gap-2 animate-fade-in">
-                <button onClick={copyCode}
-                  className="inline-flex items-center gap-3 px-5 py-2.5 rounded-lg border border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-900/30 transition-all">
-                  <span className="font-tactical text-2xl font-black text-cyan-400 tracking-[6px]">{game.code}</span>
-                  {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
-                </button>
-                <button onClick={shareLink}
-                  className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold inline-flex items-center gap-2">
-                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
-                  {copied ? '¡Copiado!' : 'Compartir enlace'}
-                </button>
-                <input ref={linkRef} readOnly value={inviteLink}
-                  onFocus={(e) => e.target.select()} onClick={(e) => e.target.select()}
-                  className="w-full bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 text-center focus:outline-none focus:border-cyan-500" />
-                <p className="font-mono text-[9px] text-gray-600">Ojo: abrir el enlace fuera de la app (WhatsApp) puede fallar; mejor invita por 🎮 arriba.</p>
-              </div>
-            )}
           </div>
+
+          {/* Share popup */}
+          {showShare && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 720, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={() => setShowShare(false)}>
+              <div onClick={(e) => e.stopPropagation()} className="animate-fade-in" style={{ width: 'min(360px, 94vw)', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, padding: '16px' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Share2 className="w-4 h-4 text-cyan-400" />
+                  <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">Compartir partida</span>
+                  <button onClick={() => setShowShare(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-widest">Código de invitación</div>
+                  <button onClick={copyCode}
+                    className="inline-flex items-center gap-3 px-5 py-2.5 rounded-lg border border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-900/30 transition-all">
+                    <span className="font-tactical text-3xl font-black text-cyan-400 tracking-[6px]">{game.code}</span>
+                    {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
+                  </button>
+                  <button onClick={shareLink}
+                    className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold inline-flex items-center gap-2">
+                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+                    {copied ? '¡Copiado!' : 'Compartir enlace'}
+                  </button>
+                  <input ref={linkRef} readOnly value={inviteLink}
+                    onFocus={(e) => e.target.select()} onClick={(e) => e.target.select()}
+                    className="w-full bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 text-center focus:outline-none focus:border-cyan-500" />
+                  <p className="font-mono text-[9px] text-gray-600 text-center">Mejor invita por 🎮 en un puesto libre; el enlace abierto en WhatsApp puede fallar.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Invite popup — search a friend by name to invite to this game */}
           {inviteOpen && (
