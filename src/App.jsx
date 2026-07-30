@@ -438,7 +438,7 @@ export default function App() {
   if (!gameStarted) {
     return (
       <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', zIndex: 10 }}>
-        <div className="min-h-full w-full flex flex-col justify-center gap-3 p-3 sm:p-5 relative animate-fade-in">
+        <div className="min-h-full w-full flex flex-col justify-center items-center gap-3 p-3 sm:p-5 relative animate-fade-in">
 
           {/* iOS install instructions */}
           {showIosHelp && (
@@ -569,7 +569,7 @@ export default function App() {
             const player = setupPlayers[step];
 
             return (
-              <>
+              <div className="w-full max-w-lg mx-auto">
                 {/* Header: title + count toggle */}
                 <div className="flex items-center justify-between gap-3 mb-3 border-b border-slate-800 pb-2">
                   <div>
@@ -730,7 +730,7 @@ export default function App() {
                     >◀ Volver a editar</button>
                   </div>
                 )}
-              </>
+              </div>
             );
           })()}
 
