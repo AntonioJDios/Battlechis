@@ -530,16 +530,18 @@ export default function App() {
         {/* Settings (profile + notifications) — pinned to the true top-right corner
             of the screen (outside the animate-fade-in transform, only on home). */}
         {homeScreen && mp.available && (
-          <button
-            onClick={() => setShowProfile(true)}
-            title="Ajustes"
-            style={{ position: 'fixed', top: 8, right: 8, zIndex: 40, maxWidth: '60vw' }}
-            className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-slate-700 bg-[#0d101a]/90 hover:border-cyan-500/50 transition-all"
-          >
-            <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
-            <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Ajustes'}</span>
-            <Settings className="w-4 h-4 text-slate-400 shrink-0" />
-          </button>
+          <div style={{ position: 'fixed', top: 8, right: 8, zIndex: 40, maxWidth: '60vw', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+            <button
+              onClick={() => setShowProfile(true)}
+              title="Ajustes"
+              className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-slate-700 bg-[#0d101a]/90 hover:border-cyan-500/50 transition-all max-w-full"
+            >
+              <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
+              <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Ajustes'}</span>
+              <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+            </button>
+            <span className="font-mono text-[9px] text-slate-500 pr-1.5 leading-none select-none">Versión {APP_VERSION}</span>
+          </div>
         )}
         <div className="min-h-full w-full flex flex-col justify-center items-center gap-3 p-3 sm:p-5 relative animate-fade-in">
 
