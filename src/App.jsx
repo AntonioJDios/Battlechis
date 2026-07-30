@@ -568,7 +568,7 @@ export default function App() {
 
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
-            <div className="flex flex-col items-center text-center py-1 animate-fade-in">
+            <div className="flex flex-col items-center text-center pt-12 pb-1 animate-fade-in">
               {/* Top-right corner: settings (profile + notifications inside) */}
               {mp.available && (
                 <button

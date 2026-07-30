@@ -73,11 +73,11 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={tryClose}>
+    <div className="py-6" style={{ position: 'fixed', inset: 0, zIndex: 600, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(0,0,0,0.85)' }} onClick={tryClose}>
       <div
-        className="animate-fade-in"
+        className="animate-fade-in w-full max-w-md my-auto"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(380px, 92vw)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, boxShadow: '0 0 40px rgba(0,240,255,0.2), 0 8px 32px rgba(0,0,0,0.7)' }}
+        style={{ background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, boxShadow: '0 0 40px rgba(0,240,255,0.2), 0 8px 32px rgba(0,0,0,0.7)' }}
       >
         <div style={{ background: 'rgba(5,40,60,0.9)', padding: '8px 12px', borderBottom: '1px solid rgba(0,240,255,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Settings className="w-4 h-4 text-cyan-400" />
