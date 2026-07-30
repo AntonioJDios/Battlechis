@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
+import { SoundManager } from './SoundManager';
 
 export default function GameControls({
   phase,
@@ -27,6 +28,17 @@ export default function GameControls({
   const fc = (a) => `rgba(${factionRgb}, ${a})`; // faction color with alpha
   const isBot = currentPlayer.isBot;
   const [collapsed, setCollapsed] = useState(false);
+  const [rolling, setRolling] = useState(false);
+  const [rollFace, setRollFace] = useState(1);
+
+  // Tumble the movement die before landing on the real result (feels like a throw).
+  const startRoll = () => {
+    if (rolling || diceRoll !== null) return;
+    setRolling(true);
+    SoundManager.playRoll?.();
+    const iv = setInterval(() => setRollFace(1 + Math.floor(Math.random() * 6)), 75);
+    setTimeout(() => { clearInterval(iv); setRolling(false); rollMovement(); }, 650);
+  };
 
   return (
     <div
@@ -113,9 +125,18 @@ export default function GameControls({
       {!collapsed && !isBot && phase === 'MOVE' && (
         <>
           {/* Dice */}
-          {diceRoll === null ? (
+          {rolling ? (
+            <div style={{
+              width: 44, height: 44, borderRadius: '8px',
+              border: `2px solid ${factionColor}`, background: '#121625',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, fontWeight: 900, color: factionColor, flexShrink: 0,
+              boxShadow: `0 0 12px ${fc(0.3)}`, fontFamily: 'var(--font-tactical)',
+              animation: 'bc-dice-shake 0.18s infinite',
+            }}>{rollFace}</div>
+          ) : diceRoll === null ? (
             <button
-              onClick={rollMovement}
+              onClick={startRoll}
               className="font-tactical text-[11px] font-bold animate-pulse"
               style={{
                 padding: '7px 18px',
