@@ -474,6 +474,23 @@ export default function App() {
     } catch { /* ignore */ }
   }, [onlineActive, gameStarted, phase, getSnapshot]);
 
+  // Your seat should show YOUR name: when the profile loads, put your nickname on
+  // the first Local seat (only while it still has a default color name).
+  useEffect(() => {
+    const nick = mp.profile?.nickname;
+    if (!nick) return;
+    setSetupPlayers((prev) => {
+      const idx = prev.findIndex((p) => !p.isBot && !p.online);
+      if (idx === -1) return prev;
+      const p = prev[idx];
+      const isDefaultName = FACTIONS.some((f) => f.commander === p.name);
+      if (!isDefaultName || p.name === nick) return prev;
+      const next = [...prev];
+      next[idx] = { ...p, name: nick };
+      return next;
+    });
+  }, [mp.profile?.nickname]);
+
   // Resume a saved local game from the home screen.
   const continueLocalGame = () => {
     try {
@@ -671,7 +688,10 @@ export default function App() {
                       <button key={i} onClick={() => setSeatConfigIdx(i)}
                         className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2.5 py-2 hover:border-cyan-500/40 transition-all text-left">
                         <div style={{ width: 12, height: 12, borderRadius: '50%', background: FACTIONS[p.faction]?.neon, flexShrink: 0 }} />
-                        <span className="font-tactical text-[12px] text-white flex-1 truncate">{p.name}</span>
+                        <span className="font-tactical text-[12px] text-white flex-1 truncate">
+                          {p.name}
+                          {!p.isBot && !p.online && mp.profile?.nickname && p.name === mp.profile.nickname && <span className="text-cyan-400/70"> (tú)</span>}
+                        </span>
                         <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${b.cls}`}>{b.txt}</span>
                         <Settings className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                       </button>
