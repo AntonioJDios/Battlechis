@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Bomb } from 'lucide-react';
 import { SoundManager } from './SoundManager';
 
@@ -8,6 +8,14 @@ export default function SiegeModal({ siegeState, onRoll, players, currentTurn, g
   const [rollResult, setRollResult] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
   const [status, setStatus] = useState(null); // 'breach' | 'repelled'
+  const [tumbleFace, setTumbleFace] = useState(1);
+
+  // Tumble random faces while rolling (same feel as combat dice).
+  useEffect(() => {
+    if (!isRolling) return;
+    const iv = setInterval(() => setTumbleFace(1 + Math.floor(Math.random() * 6)), 75);
+    return () => clearInterval(iv);
+  }, [isRolling]);
 
   if (!siegeState) return null;
 
@@ -81,7 +89,7 @@ export default function SiegeModal({ siegeState, onRoll, players, currentTurn, g
           {/* Dice display */}
           <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {isRolling ? (
-              <div style={{ width: '64px', height: '64px', borderRadius: '12px', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }} className="animate-spin">🎲</div>
+              <div style={{ width: '64px', height: '64px', borderRadius: '12px', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-tactical)', animation: 'bc-dice-shake 0.18s infinite' }}>{tumbleFace}</div>
             ) : status ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} className={status === 'breach' ? 'animate-bounce' : 'animate-wiggle'}>
                 <div style={{

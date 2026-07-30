@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Target, Award, ShieldAlert } from 'lucide-react';
 import { SoundManager } from './SoundManager';
 
@@ -6,6 +6,13 @@ export default function ConquestModal({ conquestState, onRoll, players, currentT
   const [rollResult, setRollResult] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
   const [status, setStatus] = useState(null);
+  const [tumbleFace, setTumbleFace] = useState(1);
+
+  useEffect(() => {
+    if (!isRolling) return;
+    const iv = setInterval(() => setTumbleFace(1 + Math.floor(Math.random() * 6)), 75);
+    return () => clearInterval(iv);
+  }, [isRolling]);
 
   if (!conquestState) return null;
 
@@ -77,8 +84,8 @@ export default function ConquestModal({ conquestState, onRoll, players, currentT
         {/* Dice display */}
         <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {isRolling ? (
-            <div style={{ width: '64px', height: '64px', borderRadius: '12px', border: '2px solid var(--neon-cyan)', background: 'rgba(0,240,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }} className="animate-spin">
-              🎲
+            <div style={{ width: '64px', height: '64px', borderRadius: '12px', border: '2px solid var(--neon-cyan)', background: 'rgba(0,240,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', fontWeight: 900, color: 'var(--neon-cyan)', fontFamily: 'var(--font-tactical)', animation: 'bc-dice-shake 0.18s infinite' }}>
+              {tumbleFace}
             </div>
           ) : status === 'success' ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} className="animate-bounce">
