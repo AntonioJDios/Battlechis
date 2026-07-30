@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
 import { Swords, LogOut, Zap } from 'lucide-react';
 import { SoundManager } from './SoundManager';
 
-function Die({ value, color, label }) {
+function Die({ value, color, label, rolling }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
       <span style={{ fontSize: 9, color: '#6b7280', fontFamily: 'var(--font-tactical)', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</span>
@@ -20,7 +20,8 @@ function Die({ value, color, label }) {
         color: value ? color : '#374151',
         boxShadow: value ? `0 0 14px ${color}50` : 'none',
         fontFamily: 'var(--font-tactical)',
-        transition: 'all 0.2s',
+        transition: rolling ? 'none' : 'all 0.2s',
+        animation: rolling ? 'bc-dice-shake 0.18s infinite' : 'none',
       }}>
         {value ?? '?'}
       </div>
@@ -30,6 +31,16 @@ function Die({ value, color, label }) {
 
 export default function CombatModal({ combatState, onRollRound, onRetreat, onRetreatDefender, players }) {
   const [isRolling, setIsRolling] = useState(false);
+  const [tumble, setTumble] = useState({ a: null, d: null }); // random faces while rolling
+
+  // Tumble the dice through random faces so a roll feels thrown, not conjured.
+  useEffect(() => {
+    if (!isRolling) return;
+    const iv = setInterval(() => {
+      setTumble({ a: 1 + Math.floor(Math.random() * 6), d: 1 + Math.floor(Math.random() * 6) });
+    }, 75);
+    return () => clearInterval(iv);
+  }, [isRolling]);
 
   if (!combatState) return null;
 
@@ -94,9 +105,9 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
 
         {/* Dice result */}
         <div style={{ padding: '8px 14px 12px', display: 'flex', justifyContent: 'center', gap: 24, alignItems: 'flex-end' }}>
-          <Die value={isRolling ? null : lastAttRoll} color={attF?.neon ?? '#ff3b3b'} label="Ataque" />
+          <Die value={isRolling ? tumble.a : lastAttRoll} color={attF?.neon ?? '#ff3b3b'} label="Ataque" rolling={isRolling} />
           <div style={{ paddingBottom: 14, fontSize: 18, color: '#374151', fontWeight: 900 }}>⚔</div>
-          <Die value={isRolling ? null : lastDefRoll} color={defF?.neon ?? '#0088ff'} label="Defensa" />
+          <Die value={isRolling ? tumble.d : lastDefRoll} color={defF?.neon ?? '#0088ff'} label="Defensa" rolling={isRolling} />
         </div>
 
         {/* Last round result */}

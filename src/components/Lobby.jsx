@@ -475,8 +475,8 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-tactical text-sm font-black text-cyan-400 tracking-widest">{g.code}</span>
-                      <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded ${g.status === 'playing' ? 'text-green-400 bg-green-950/40' : 'text-amber-400 bg-amber-950/40'}`}>
-                        {g.status === 'playing' ? 'EN JUEGO' : 'EN ESPERA'}
+                      <span className={`font-mono text-[8px] px-1.5 py-0.5 rounded ${g.status === 'playing' ? 'text-green-400 bg-green-950/40' : g.status === 'finished' ? 'text-slate-400 bg-slate-800/60' : 'text-amber-400 bg-amber-950/40'}`}>
+                        {g.status === 'playing' ? 'EN JUEGO' : g.status === 'finished' ? 'TERMINADA' : 'EN ESPERA'}
                       </span>
                     </div>
                     <div className="font-mono text-[9px] text-gray-500 truncate">👤 {humans} · {when}</div>

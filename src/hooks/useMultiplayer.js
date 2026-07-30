@@ -482,18 +482,18 @@ export function useMultiplayer() {
     applyRow(row); // hydrate the current state immediately
   }, [subscribe, applyRow]);
 
-  // ── List this device's unfinished games (waiting/playing) to resume or delete ──
+  // ── List this device's games (waiting/playing/finished) to resume or delete ──
+  // NOTE: we do NOT auto-delete finished games here — doing so made in-progress
+  // games "vanish" the moment someone opened this list. Old ones are cleaned by
+  // the pg_cron job (or manually with the trash button).
   const listMyGames = useCallback(async () => {
     const uid = await ensureAuth();
-    // Best-effort cleanup: drop this player's finished games so they don't pile up
-    // (works even without the pg_cron job). Fire-and-forget.
-    supabase.from(TABLE).delete().contains('member_ids', [uid]).eq('status', 'finished').then(() => {}, () => {});
     const { data, error: selErr } = await supabase
       .from(TABLE)
       .select('*')
       .contains('member_ids', [uid])
-      .neq('status', 'finished')
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false })
+      .limit(30);
     if (selErr) { setError(selErr.message); return []; }
     return data || [];
   }, [ensureAuth]);

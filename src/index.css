@@ -205,6 +205,15 @@ body::after {
   color: var(--text-muted);
 }
 
+/* Dice tumble while rolling (combat/siege/etc.) */
+@keyframes bc-dice-shake {
+  0%   { transform: translateY(0) rotate(-8deg) scale(1.05); }
+  25%  { transform: translateY(-3px) rotate(6deg) scale(1.1); }
+  50%  { transform: translateY(1px) rotate(-5deg) scale(1.02); }
+  75%  { transform: translateY(-2px) rotate(7deg) scale(1.08); }
+  100% { transform: translateY(0) rotate(-8deg) scale(1.05); }
+}
+
 /* Dynamic Faction Accent Utilities */
 .faction-red { color: var(--neon-red); text-shadow: 0 0 5px rgba(255, 59, 59, 0.5); }
 .faction-blue { color: var(--neon-blue); text-shadow: 0 0 5px rgba(0, 136, 255, 0.5); }
