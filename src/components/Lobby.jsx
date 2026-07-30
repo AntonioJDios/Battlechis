@@ -65,10 +65,18 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     setLocalError(null); setCode(inv.code);
     try {
       const row = await mp.findGame(inv.code);
+      const alreadyIn = (row.member_ids || []).includes(mp.userId)
+        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+      // Already joined → go straight to the room/game (don't ask to pick a seat).
+      if (alreadyIn) {
+        mp.dismissGameInvite(inv.id).catch(() => {}); // the invite is redundant now
+        setInvites((prev) => (prev || []).filter((x) => x.id !== inv.id));
+        mp.reconnect(row);
+        setView(row.status === 'playing' ? 'reconnecting' : 'waiting');
+        return;
+      }
       if (row.status === 'waiting') { setFoundGame(row); setView('pickSeat'); return; }
-      const isMember = (row.member_ids || []).includes(mp.userId) || (row.state?.seats || []).some((s) => s.userId === mp.userId);
-      if (isMember) { setView('reconnecting'); mp.reconnect(row); }
-      else { setLocalError('Esa partida ya ha empezado y no formas parte de ella.'); }
+      setLocalError('Esa partida ya ha empezado y no formas parte de ella.');
     } catch (e) { setLocalError(e.message); }
   };
 
@@ -118,20 +126,21 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     setBusy(true); setLocalError(null);
     try {
       const row = await mp.findGame(code);
+      const alreadyIn = (row.member_ids || []).includes(mp.userId)
+        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+      // Already joined → go straight to the room/game (don't re-pick a seat).
+      if (alreadyIn) {
+        mp.reconnect(row);
+        setView(row.status === 'playing' ? 'reconnecting' : 'waiting');
+        return;
+      }
       if (row.status === 'waiting') {
         setFoundGame(row);
         setView('pickSeat');
         return;
       }
-      // Game in progress (or finished): reconnect only if this device is a member.
-      const isMember = (row.member_ids || []).includes(mp.userId)
-        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
-      if (isMember) {
-        setView('reconnecting');
-        mp.reconnect(row); // the app switches to the game once state hydrates
-      } else {
-        setLocalError('Esa partida ya ha empezado y no formas parte de ella (o entras desde otro dispositivo).');
-      }
+      // Game already started and you're not part of it.
+      setLocalError('Esa partida ya ha empezado y no formas parte de ella (o entras desde otro dispositivo).');
     } catch (e) {
       setLocalError(e.message);
     } finally {
