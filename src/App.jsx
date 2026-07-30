@@ -19,6 +19,7 @@ import ProfileModal from './components/ProfileModal';
 import FriendsModal from './components/FriendsModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
+import { APP_VERSION } from './version';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X, Home } from 'lucide-react';
 
 // Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
@@ -205,6 +206,23 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [onboarded, setOnboarded] = useState(false); // dismissed the create-profile prompt this session
+  const [updateAvailable, setUpdateAvailable] = useState(false); // a newer app version is live
+
+  // Check the DB app version vs this build; prompt an update if it's newer.
+  useEffect(() => {
+    if (!mp.available) return;
+    let alive = true;
+    const check = () => mp.fetchAppVersion().then((v) => { if (alive && typeof v === 'number' && v > APP_VERSION) setUpdateAvailable(true); }).catch(() => {});
+    check();
+    const t = setInterval(check, 5 * 60 * 1000); // re-check every 5 min while open
+    return () => { alive = false; clearInterval(t); };
+  }, [mp.available, mp.fetchAppVersion]);
+
+  // Force a clean reload to the latest version (clears SW caches first — reliable on iOS).
+  const applyUpdate = async () => {
+    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); } } catch { /* ignore */ }
+    window.location.reload();
+  };
   const [friendToast, setFriendToast] = useState(null); // { ok, text }
   const friendLinkRef = React.useRef(false);
 
@@ -583,6 +601,14 @@ export default function App() {
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="flex flex-col items-center text-center pt-12 pb-1 animate-fade-in">
+              {updateAvailable && (
+                <button
+                  onClick={applyUpdate}
+                  className="w-full max-w-xs mb-4 btn-tactical border-green-400 text-green-300 bg-green-950/40 font-black tracking-widest text-sm py-2.5 hover:bg-green-500/20 animate-pulse"
+                >
+                  🔄 ACTUALIZAR · NUEVA VERSIÓN
+                </button>
+              )}
               {inAppBrowser && !dismissInApp && (
                 <div className="w-full max-w-sm mb-3 rounded-lg border border-amber-500/50 bg-amber-950/30 px-3 py-2 text-left">
                   <p className="font-mono text-[10px] text-amber-300 leading-relaxed">

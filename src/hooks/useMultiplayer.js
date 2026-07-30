@@ -211,6 +211,16 @@ export function useMultiplayer() {
     catch { /* best-effort */ }
   }, [ensureAuth]);
 
+  // ── App version (from battlechis_config) to prompt updates ──
+  const fetchAppVersion = useCallback(async () => {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data } = await supabase.from('battlechis_config').select('value').eq('key', 'app_version').maybeSingle();
+      const n = data ? parseInt(data.value, 10) : NaN;
+      return Number.isFinite(n) ? n : null;
+    } catch { return null; }
+  }, []);
+
   // ── Friends: search by unique name, request + accept (all in-app) ──
 
   // Is a nickname free (or already mine)?
@@ -677,6 +687,7 @@ export function useMultiplayer() {
     pushEnabled,
     notify,
     profile,
+    fetchAppVersion,
     saveProfile,
     checkNickname,
     setPassword,

@@ -332,3 +332,21 @@ begin
 end;
 $$;
 grant execute on function public.battlechis_claim_profile(text, text) to authenticated;
+
+-- ── Config global (p. ej. versión de la app) ──
+-- Todos pueden LEERla; solo el admin la cambia desde el SQL Editor (sin policy de
+-- escritura). Para avisar de una actualización: sube el número aquí y en src/version.js.
+create table if not exists public.battlechis_config (
+  key   text primary key,
+  value text not null
+);
+alter table public.battlechis_config enable row level security;
+drop policy if exists battlechis_config_read on public.battlechis_config;
+create policy battlechis_config_read
+  on public.battlechis_config for select
+  to anon, authenticated
+  using (true);
+insert into public.battlechis_config (key, value) values ('app_version', '1')
+  on conflict (key) do nothing;
+-- Para forzar el aviso de "Actualizar" a todos:
+--   update public.battlechis_config set value = '2' where key = 'app_version';
