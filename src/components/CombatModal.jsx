@@ -78,9 +78,11 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
         className="animate-fade-in"
         style={{
           pointerEvents: 'all',
-          width: 'min(320px, calc(100vw - 32px))',
-          maxHeight: 'calc(100dvh - 32px)',
+          width: 'min(400px, calc(100vw - 16px))',
+          maxWidth: '100%',
+          maxHeight: 'calc(100dvh - 24px)',
           overflowY: 'auto',
+          overflowX: 'hidden',
           background: '#0f121d',
           border: '1px solid rgba(255,59,59,0.4)',
           borderRadius: '10px',
@@ -96,7 +98,7 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
         </div>
 
         {/* Troop counts */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, padding: '12px 14px 8px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', gap: 8, padding: '12px 14px 8px', alignItems: 'center' }}>
           <div style={{ background: `${attF?.neon}14`, border: `1px solid ${attF?.neon}30`, borderRadius: 8, padding: '8px', textAlign: 'center' }}>
             <div className="font-tactical text-[9px] text-gray-400 truncate mb-1">{attacker?.name?.split(' ')[0]}</div>
             <div className="font-tactical text-2xl font-black text-white">{attackerTroops}<span className="text-[9px] text-gray-500 ml-0.5">T</span></div>
@@ -134,7 +136,7 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
         {/* Actions */}
         <div style={{ padding: '8px 14px 12px', borderTop: '1px solid rgba(255,59,59,0.1)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {!attacker?.isBot ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)', gap: 6 }}>
               <button onClick={onRetreat} disabled={isRolling}
                 className="btn-tactical text-[10px] py-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/10">
                 <LogOut className="w-3 h-3" /> Retirar
