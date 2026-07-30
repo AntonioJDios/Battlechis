@@ -509,6 +509,20 @@ export default function App() {
   if (!gameStarted) {
     return (
       <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', zIndex: 10 }}>
+        {/* Settings (profile + notifications) — pinned to the true top-right corner
+            of the screen (outside the animate-fade-in transform, only on home). */}
+        {homeScreen && mp.available && (
+          <button
+            onClick={() => setShowProfile(true)}
+            title="Ajustes"
+            style={{ position: 'fixed', top: 8, right: 8, zIndex: 40, maxWidth: '60vw' }}
+            className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-slate-700 bg-[#0d101a]/90 hover:border-cyan-500/50 transition-all"
+          >
+            <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
+            <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Ajustes'}</span>
+            <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+          </button>
+        )}
         <div className="min-h-full w-full flex flex-col justify-center items-center gap-3 p-3 sm:p-5 relative animate-fade-in">
 
           {/* iOS install instructions */}
@@ -569,19 +583,6 @@ export default function App() {
           {homeScreen ? (
             /* ── PORTADA: Jugar / Instalar ── */
             <div className="flex flex-col items-center text-center pt-12 pb-1 animate-fade-in">
-              {/* Top-right corner: settings (profile + notifications inside) */}
-              {mp.available && (
-                <button
-                  onClick={() => setShowProfile(true)}
-                  title="Ajustes"
-                  style={{ position: 'fixed', top: 8, right: 8, zIndex: 40, maxWidth: '55vw' }}
-                  className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-slate-700 bg-[#0d101a]/90 hover:border-cyan-500/50 transition-all"
-                >
-                  <span className="text-lg leading-none">{mp.profile?.avatar || '🎖️'}</span>
-                  <span className="font-tactical text-xs text-white truncate">{mp.profile?.nickname || 'Ajustes'}</span>
-                  <Settings className="w-4 h-4 text-slate-400 shrink-0" />
-                </button>
-              )}
               {inAppBrowser && !dismissInApp && (
                 <div className="w-full max-w-sm mb-3 rounded-lg border border-amber-500/50 bg-amber-950/30 px-3 py-2 text-left">
                   <p className="font-mono text-[10px] text-amber-300 leading-relaxed">
