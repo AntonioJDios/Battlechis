@@ -66,7 +66,10 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   };
 
   const delGame = async (g) => {
-    if (!window.confirm('¿Borrar esta partida? No se puede deshacer.')) return;
+    const msg = g.status === 'finished'
+      ? '¿Borrar esta partida terminada?'
+      : '⚠️ Esto BORRA la partida para TODOS los jugadores y no se puede deshacer. ¿Seguro?';
+    if (!window.confirm(msg)) return;
     await mp.deleteGame(g.id);
     setMyGames((prev) => (prev || []).filter((x) => x.id !== g.id));
   };
@@ -487,13 +490,18 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                   >
                     <RotateCcw className="w-3.5 h-3.5" /> Volver
                   </button>
-                  <button
-                    onClick={() => delGame(g)}
-                    title="Borrar partida"
-                    className="p-2 border border-red-500/40 rounded text-red-400 hover:bg-red-900/30 transition-all shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {/* Only the host can delete an active game (avoids a player
+                      accidentally nuking the shared game); anyone can clear a
+                      finished one. */}
+                  {(g.host_id === mp.userId || g.status === 'finished') && (
+                    <button
+                      onClick={() => delGame(g)}
+                      title={g.status === 'finished' ? 'Borrar partida' : 'Borrar (para todos)'}
+                      className="p-2 border border-red-500/40 rounded text-red-400 hover:bg-red-900/30 transition-all shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               );
             })

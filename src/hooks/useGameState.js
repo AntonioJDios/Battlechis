@@ -1505,7 +1505,9 @@ export function useGameState(online = null) {
     const attacker = players.find(p => p.faction === combatState.attackerFaction);
     if (!attacker?.isBot) return;
 
-    const timer = setTimeout(() => executeCombatRound(true), 900);
+    // One round at a time (not the whole battle at once) so every roll is pushed
+    // and spectators online actually SEE the dice, not just the final result.
+    const timer = setTimeout(() => executeCombatRound(false), 900);
     return () => clearTimeout(timer);
   }, [combatState, executeCombatRound, players, botAuthority]);
 

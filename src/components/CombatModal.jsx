@@ -32,6 +32,14 @@ function Die({ value, color, label, rolling }) {
 export default function CombatModal({ combatState, onRollRound, onRetreat, onRetreatDefender, players }) {
   const [isRolling, setIsRolling] = useState(false);
   const [tumble, setTumble] = useState({ a: null, d: null }); // random faces while rolling
+  const [auto, setAuto] = useState(false);
+
+  const handleRoll = () => {
+    setIsRolling(true);
+    SoundManager.playRoll?.();
+    setTimeout(() => { setIsRolling(false); onRollRound(false); }, 600);
+  };
+  const handleAuto = () => setAuto(true);
 
   // Tumble the dice through random faces so a roll feels thrown, not conjured.
   useEffect(() => {
@@ -41,6 +49,17 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
     }, 75);
     return () => clearInterval(iv);
   }, [isRolling]);
+
+  // "Auto" plays out the battle ONE round at a time (paced), not instantly, so
+  // every roll is pushed and spectators online actually see the dice.
+  useEffect(() => {
+    if (!auto) return;
+    if (!combatState || combatState.ended) { setAuto(false); return; }
+    if (isRolling) return;
+    const t = setTimeout(() => handleRoll(), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, combatState, isRolling]);
 
   if (!combatState) return null;
 
@@ -52,18 +71,6 @@ export default function CombatModal({ combatState, onRollRound, onRetreat, onRet
 
   const attWon = lastAttRoll !== null && lastAttRoll > lastDefRoll;
   const defWon = lastDefRoll !== null && lastDefRoll >= lastAttRoll;
-
-  const handleRoll = () => {
-    setIsRolling(true);
-    SoundManager.playRoll?.();
-    setTimeout(() => { setIsRolling(false); onRollRound(false); }, 600);
-  };
-
-  const handleAuto = () => {
-    setIsRolling(true);
-    SoundManager.playRoll?.();
-    setTimeout(() => { setIsRolling(false); onRollRound(true); }, 400);
-  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
