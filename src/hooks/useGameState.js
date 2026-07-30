@@ -910,8 +910,10 @@ export function useGameState(online = null) {
         return;
       }
 
-      // Select origin platoon
-      if (state.occupyingFaction === currentPlayer.faction) {
+      // Select origin platoon — UNLESS this own cell is a valid highlighted
+      // target (then fall through to move/stack troops onto it).
+      if (state.occupyingFaction === currentPlayer.faction
+          && !(selectedNode && selectedNode !== nodeId && highlightedNodes.includes(nodeId))) {
         const isBase = node.type === 'hq' || node.type === 'neutral' || node.type === 'center';
         if (isBase && state.troops <= 1) {
           addLog("ERROR: Las bases deben mantener al menos 1 tropa de guarnición.", "error");
