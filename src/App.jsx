@@ -19,7 +19,7 @@ import ProfileModal from './components/ProfileModal';
 import FriendsModal from './components/FriendsModal';
 import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
-import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X } from 'lucide-react';
+import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X, Home } from 'lucide-react';
 
 // Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
 // does NOT preserve key order — compares equal to our locally-built snapshot.
@@ -195,6 +195,8 @@ export default function App() {
   const [brutalOpt, setBrutalOpt] = useState(false); // brutal cards (bomb + instant núcleo win)
   const [showGameConfig, setShowGameConfig] = useState(false); // board+cards popup
   const [seatConfigIdx, setSeatConfigIdx] = useState(null); // which seat's role popup is open
+  // A local (hotseat) game saved on this device, so "back to menu" can resume it.
+  const [hasSavedLocal] = useState(() => { try { return !!localStorage.getItem('bc_local_game'); } catch { return false; } });
   // Landing page: show "Jugar / Instalar" first; deep-link joins skip straight in.
   const [homeScreen, setHomeScreen] = useState(true);
   const [lobbyInitialView, setLobbyInitialView] = useState('choose'); // 'choose' | 'mygames'
@@ -458,8 +460,26 @@ export default function App() {
         .catch(() => {});
     } else {
       // Local hotseat game.
+      try { localStorage.removeItem('bc_local_game'); } catch { /* ignore */ }
       startGame(setupPlayers, { boardSize: boardSizeOpt, brutalCards: brutalOpt });
     }
+  };
+
+  // Persist the LOCAL game so "volver al menú" keeps it (online lives in the DB).
+  useEffect(() => {
+    if (onlineActive) return;
+    try {
+      if (gameStarted && phase !== 'GAME_OVER') localStorage.setItem('bc_local_game', JSON.stringify(getSnapshot()));
+      else if (phase === 'GAME_OVER') localStorage.removeItem('bc_local_game');
+    } catch { /* ignore */ }
+  }, [onlineActive, gameStarted, phase, getSnapshot]);
+
+  // Resume a saved local game from the home screen.
+  const continueLocalGame = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem('bc_local_game'));
+      if (s) hydrate(s);
+    } catch { /* ignore */ }
   };
 
   const toggleMute = () => {
@@ -560,11 +580,19 @@ export default function App() {
                 Risk + Parchís táctico
               </p>
               <div className="flex flex-col gap-2 w-full max-w-xs">
+                {hasSavedLocal && (
+                  <button
+                    onClick={continueLocalGame}
+                    className="btn-tactical border-green-400 text-green-400 bg-green-950/30 font-black tracking-widest text-base py-2.5 hover:shadow-[0_0_20px_rgba(0,230,118,0.4)]"
+                  >
+                    ▶ CONTINUAR PARTIDA
+                  </button>
+                )}
                 <button
                   onClick={() => setHomeScreen(false)}
                   className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/30 font-black tracking-widest text-base py-2.5 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
                 >
-                  <Play className="w-5 h-5 mr-1" /> JUGAR
+                  <Play className="w-5 h-5 mr-1" /> {hasSavedLocal ? 'NUEVA PARTIDA' : 'JUGAR'}
                 </button>
                 {mp.available && (
                   <button
@@ -923,17 +951,18 @@ export default function App() {
             {isMuted ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
           </button>
           
-          {/* Reset button */}
+          {/* Back to menu (non-destructive: the game is kept) */}
           <button
             onClick={() => {
-              if (window.confirm("¿Seguro que deseas abortar esta misión y volver al menú principal?")) {
-                window.location.reload();
-              }
+              const msg = onlineActive
+                ? '¿Volver al menú? La partida NO se borra: sigue en "Mis partidas" para continuar.'
+                : '¿Volver al menú? La partida local se guarda: podrás continuarla desde el menú.';
+              if (window.confirm(msg)) window.location.reload();
             }}
-            className="p-2 border border-slate-800 rounded text-slate-500 hover:text-red-400 hover:border-red-950 transition-all"
-            title="Reiniciar partida"
+            className="p-2 border border-slate-800 rounded text-slate-500 hover:text-cyan-400 hover:border-cyan-900 transition-all"
+            title="Volver al menú (sin borrar la partida)"
           >
-            <RotateCcw className="w-4 h-4" />
+            <Home className="w-4 h-4" />
           </button>
         </div>
 
