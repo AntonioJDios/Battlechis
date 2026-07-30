@@ -792,9 +792,9 @@ export default function App() {
 
         </div>
 
-        {/* Online lobby overlay (full-screen, scrolls with the page) */}
+        {/* Online lobby overlay (full-screen, scrolls with the page, centered) */}
         {showLobby && (
-          <div className="fixed inset-0 z-[700] overflow-y-auto bg-black/85 backdrop-blur-md py-4">
+          <div className="fixed inset-0 z-[700] overflow-y-auto bg-black/85 backdrop-blur-md flex flex-col items-center">
             <Lobby
               mp={mp}
               seatsConfig={seatsConfig}

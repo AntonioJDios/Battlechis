@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FACTIONS } from '../utils/boardGraph';
-import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw, FolderOpen } from 'lucide-react';
+import { Users, Wifi, Copy, Check, ArrowLeft, Loader2, Share2, Trash2, RotateCcw, FolderOpen, Search, X } from 'lucide-react';
 
 /**
  * Online lobby: create a game (configuring the 5 seats) or join by code,
@@ -27,6 +27,23 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   const [friends, setFriends] = useState(null); // friend circle (for inviting)
   const [invited, setInvited] = useState({});   // friendId -> true once a push invite is sent
   const [showShare, setShowShare] = useState(false); // reveal code/link (kept at the bottom)
+  const [inviteOpen, setInviteOpen] = useState(false); // "invite a friend" search popup
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteResults, setInviteResults] = useState(null);
+  const [inviteSearching, setInviteSearching] = useState(false);
+
+  // Debounced friend search for the invite popup.
+  useEffect(() => {
+    if (!inviteOpen) return;
+    const q = inviteQuery.trim();
+    if (q.length < 2) { setInviteResults(null); return; }
+    setInviteSearching(true);
+    const t = setTimeout(async () => {
+      try { setInviteResults(await mp.searchProfiles(q)); } catch { setInviteResults([]); }
+      setInviteSearching(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [inviteQuery, inviteOpen, mp.searchProfiles]);
   const linkRef = React.useRef(null);
 
   // Load the friend circle when we enter the waiting room (to invite them).
@@ -210,70 +227,33 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
           <div>
             <div className="font-tactical text-[10px] text-gray-400 uppercase tracking-wider mb-2">Comandantes</div>
             <div className="flex flex-col gap-2">
-              {seats.map((s, i) => (
-                <div key={i} className="flex items-center gap-3 bg-[#0d101a] border border-slate-900 rounded p-2">
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[s.faction]?.neon, flexShrink: 0 }} />
-                  {s.type === 'human' && s.userId && s.avatar && <span className="text-base leading-none shrink-0">{s.avatar}</span>}
-                  <span className="font-tactical text-[11px] text-white flex-1 truncate">{s.name}</span>
-                  <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${
-                    s.type === 'bot' ? 'text-amber-400 bg-amber-950/30'
-                    : s.userId ? 'text-green-400 bg-green-950/30' : 'text-gray-500 bg-slate-900'
-                  }`}>
-                    {s.type === 'bot' ? '🤖 IA' : s.userId ? '👤 Conectado' : '⏳ Libre'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Invite friends (push) — host picks a friend; a seat opens if needed */}
-          {isHost && (() => {
-            const seatedIds = new Set(seats.filter((s) => s.userId).map((s) => s.userId));
-            const invitable = (friends || []).filter((f) => !seatedIds.has(f.user_id));
-            const openHuman = seats.filter((s) => s.type === 'human' && !s.userId).length;
-            const hasBot = seats.some((s) => s.type === 'bot');
-            const canSeat = openHuman > 0 || hasBot;
-            return (
-              <div className="border-t border-slate-800 pt-3">
-                <div className="font-tactical text-[10px] text-gray-400 uppercase tracking-wider mb-2">Invitar amigos</div>
-                {friends === null ? (
-                  <div className="flex items-center gap-2 text-cyan-400 font-mono text-[11px] py-1"><Loader2 className="w-4 h-4 animate-spin" /> Cargando…</div>
-                ) : friends.length === 0 ? (
-                  <p className="font-mono text-[10px] text-gray-500">Aún no tienes amigos. Añádelos desde la portada con <strong className="text-cyan-400">👥 AMIGOS Y RANKING</strong>.</p>
-                ) : invitable.length === 0 ? (
-                  <p className="font-mono text-[10px] text-gray-500">Tus amigos ya están en la partida.</p>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {invitable.map((f) => (
-                      <div key={f.user_id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5">
-                        <span className="text-base shrink-0">{f.avatar || '🎖️'}</span>
-                        <span className="font-tactical text-[11px] text-white flex-1 truncate">{f.nickname || 'Comandante'}</span>
-                        <button
-                          onClick={async () => {
-                            const r = await mp.ensureOpenSeat(game.id);
-                            if (!r.ok) { setLocalError(r.msg); return; }
-                            await mp.inviteToGame(f.user_id, game.id, game.code);
-                            setInvited((p) => ({ ...p, [f.user_id]: true }));
-                          }}
-                          disabled={invited[f.user_id] || !canSeat}
-                          className={`py-1 px-2.5 text-[10px] font-bold rounded border flex items-center gap-1 shrink-0 ${invited[f.user_id] ? 'border-green-500/40 text-green-400 bg-green-950/20' : 'border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30 disabled:opacity-40'}`}
-                        >
-                          {invited[f.user_id] ? '✓ Invitado' : '🎮 Invitar'}
-                        </button>
-                      </div>
-                    ))}
+              {seats.map((s, i) => {
+                const free = s.type === 'human' && !s.userId;
+                return (
+                  <div key={i} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded p-2">
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[s.faction]?.neon, flexShrink: 0 }} />
+                    {s.type === 'human' && s.userId && s.avatar && <span className="text-base leading-none shrink-0">{s.avatar}</span>}
+                    <span className="font-tactical text-[11px] text-white flex-1 truncate">{s.name}</span>
+                    <span className={`font-mono text-[9px] px-2 py-0.5 rounded ${
+                      s.type === 'bot' ? 'text-amber-400 bg-amber-950/30'
+                      : s.userId ? 'text-green-400 bg-green-950/30' : 'text-gray-500 bg-slate-900'
+                    }`}>
+                      {s.type === 'bot' ? '🤖 IA' : s.userId ? '👤 Conectado' : '⏳ Libre'}
+                    </span>
+                    {isHost && free && (
+                      <button onClick={() => { setInviteOpen(true); setInviteQuery(''); setInviteResults(null); }}
+                        className="py-1 px-2.5 text-[10px] font-bold rounded border border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30 shrink-0">
+                        🎮 Invitar
+                      </button>
+                    )}
                   </div>
-                )}
-                <p className="font-mono text-[9px] text-gray-600 mt-1.5">
-                  {openHuman > 0
-                    ? `Hay ${openHuman} puesto${openHuman !== 1 ? 's' : ''} libre${openHuman !== 1 ? 's' : ''}. `
-                    : hasBot ? 'Al invitar, un puesto 🤖 se abrirá para tu amigo. '
-                    : 'Partida llena de humanos. '}
-                  La invitación le aparece en <strong>Mis partidas</strong> (y recibe un aviso push si lo tiene activado).
-                </p>
-              </div>
-            );
-          })()}
+                );
+              })}
+            </div>
+            {isHost && seats.some((s) => s.type === 'human' && !s.userId) && (
+              <p className="font-mono text-[9px] text-gray-600 mt-1.5">Pulsa <strong className="text-cyan-400">Invitar</strong> en un puesto libre para buscar a tu amigo.</p>
+            )}
+          </div>
 
           {(() => {
             const humanSeats = seats.filter((s) => s.type === 'human');
@@ -337,6 +317,52 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
               </div>
             )}
           </div>
+
+          {/* Invite popup — search a friend by name to invite to this game */}
+          {inviteOpen && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 720, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={() => setInviteOpen(false)}>
+              <div onClick={(e) => e.stopPropagation()} className="animate-fade-in" style={{ width: 'min(380px, 94vw)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, padding: '14px 16px' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="font-tactical text-[11px] text-cyan-400 font-bold uppercase tracking-widest flex-1">Invitar a la partida</span>
+                  <button onClick={() => setInviteOpen(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="flex items-center gap-2 bg-[#121625] border border-slate-800 rounded px-2 focus-within:border-cyan-500">
+                  <Search className="w-4 h-4 text-slate-500 shrink-0" />
+                  <input value={inviteQuery} onChange={(e) => setInviteQuery(e.target.value)} autoFocus
+                    placeholder="Busca a tu amigo por nombre…"
+                    className="flex-1 min-w-0 bg-transparent text-white font-mono text-sm py-2 focus:outline-none" />
+                  {inviteSearching && <Loader2 className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />}
+                </div>
+                <div className="flex flex-col gap-1.5 mt-2">
+                  {inviteResults === null ? (
+                    <p className="font-mono text-[10px] text-gray-500 py-1">Escribe un nombre para buscar.</p>
+                  ) : inviteResults.length === 0 ? (
+                    <p className="font-mono text-[10px] text-gray-500 py-1">Nadie con ese nombre.</p>
+                  ) : inviteResults.map((u) => {
+                    const seated = seats.some((s) => s.userId === u.user_id);
+                    const done = invited[u.user_id];
+                    return (
+                      <div key={u.user_id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5">
+                        <span className="text-lg shrink-0">{u.avatar || '🎖️'}</span>
+                        <span className="font-tactical text-[12px] text-white flex-1 truncate">{u.nickname}</span>
+                        {seated ? (
+                          <span className="font-mono text-[9px] text-green-400 shrink-0">ya está</span>
+                        ) : (
+                          <button
+                            onClick={async () => { await mp.inviteToGame(u.user_id, game.id, game.code); setInvited((p) => ({ ...p, [u.user_id]: true })); }}
+                            disabled={done}
+                            className={`py-1 px-2.5 text-[10px] font-bold rounded border shrink-0 ${done ? 'border-green-500/40 text-green-400 bg-green-950/20' : 'border-cyan-400/50 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-900/30'}`}>
+                            {done ? '✓ Invitado' : '🎮 Invitar'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="font-mono text-[9px] text-gray-600 mt-2">Le llega la invitación en <strong>Mis partidas</strong> (+ aviso push si lo tiene activado).</p>
+              </div>
+            </div>
+          )}
         </div>
       </Shell>
     );
@@ -551,10 +577,10 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   );
 }
 
-// No card box: fills the width and scrolls with the page, not inside a box.
+// No card box: fills the width, centered, scrolls with the page (not in a box).
 function Shell({ title, children, onBack }) {
   return (
-    <div className="w-full max-w-lg mx-auto p-4 animate-fade-in">
+    <div className="w-full max-w-lg mx-auto my-auto p-4 animate-fade-in">
       <div className="flex items-center gap-2 mb-3">
         <button onClick={onBack} className="p-1.5 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-slate-700 transition-all shrink-0">
           <ArrowLeft className="w-4 h-4" />
