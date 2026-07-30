@@ -1219,7 +1219,7 @@ export default function App() {
       {showLog && (
         <div
           className="fixed z-[500] tactical-panel bg-[#0d101a]/95 border-slate-700 rounded-md shadow-[0_0_30px_rgba(0,0,0,0.8)] animate-fade-in"
-          style={{ bottom: '16px', right: '16px', width: '340px', height: '320px', display: 'flex', flexDirection: 'column' }}
+          style={{ bottom: '12px', left: '50%', transform: 'translateX(-50%)', width: 'min(340px, calc(100vw - 24px))', height: 'min(320px, calc(100dvh - 90px))', display: 'flex', flexDirection: 'column' }}
         >
           <div className="panel-header bg-[#151a30] flex items-center justify-between">
             <span>TÉRMINAL MILITAR (LOGS)</span>
