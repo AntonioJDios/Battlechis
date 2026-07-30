@@ -41,7 +41,11 @@ export default function FriendsModal({
   };
   const accept = async (u) => { await acceptFriendRequest(u.user_id); setRequests((p) => (p || []).filter((x) => x.user_id !== u.user_id)); loadRanking(); };
   const reject = async (u) => { await rejectFriendRequest(u.user_id); setRequests((p) => (p || []).filter((x) => x.user_id !== u.user_id)); };
-  const remove = async (id) => { await removeFriend(id); setRanking((p) => (p || []).filter((f) => f.user_id !== id)); };
+  const remove = async (f) => {
+    if (!window.confirm(`¿Eliminar a ${f.nickname || 'este amigo'} de tus amigos? Dejaréis de estar enlazados.`)) return;
+    const r = await removeFriend(f.user_id);
+    if (!r || r.ok !== false) setRanking((p) => (p || []).filter((x) => x.user_id !== f.user_id));
+  };
 
   return (
     <div className="py-6" style={{ position: 'fixed', inset: 0, zIndex: 600, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(0,0,0,0.85)' }} onClick={onClose}>
@@ -140,7 +144,7 @@ export default function FriendsModal({
                     <span className={`font-tactical text-[12px] flex-1 truncate ${isMe ? 'text-cyan-300' : 'text-white'}`}>{f.nickname || 'Comandante'}{isMe ? ' (tú)' : ''}</span>
                     <span className="font-mono text-[11px] text-yellow-400 shrink-0">🏆 {f.games_won}</span>
                     <span className="font-mono text-[9px] text-gray-500 shrink-0">/ {f.games_played}</span>
-                    {!isMe && <button onClick={() => remove(f.user_id)} title="Eliminar amigo" className="p-1 text-slate-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>}
+                    {!isMe && <button onClick={() => remove(f)} title="Eliminar amigo" className="p-1.5 border border-red-500/40 rounded text-red-400/90 hover:text-red-300 hover:bg-red-900/30 transition-all shrink-0"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 );
               })}

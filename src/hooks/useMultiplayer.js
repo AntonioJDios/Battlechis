@@ -311,10 +311,15 @@ export function useMultiplayer() {
   }, [ensureAuth]);
 
   const removeFriend = useCallback(async (friendId) => {
-    if (!isSupabaseConfigured) return;
-    const uid = await ensureAuth();
-    await supabase.from(FRIENDS_TABLE).delete()
-      .or(`and(user_id.eq.${uid},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${uid})`);
+    if (!isSupabaseConfigured || !friendId) return { ok: false };
+    try {
+      const uid = await ensureAuth();
+      // Two simple deletes cover both directions of the (directed) friendship.
+      const a = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', uid).eq('friend_id', friendId);
+      const b = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', friendId).eq('friend_id', uid);
+      if (a.error || b.error) return { ok: false, msg: (a.error || b.error).message };
+      return { ok: true };
+    } catch (e) { return { ok: false, msg: e.message }; }
   }, [ensureAuth]);
 
   // ── In-app game invitations ──
