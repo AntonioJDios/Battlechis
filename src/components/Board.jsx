@@ -226,8 +226,14 @@ export default function Board({
         </g>
 
         {/* 2. Draw Nodes */}
+        {/* Paint highlighted targets (and the selected node) LAST so they sit on
+            top and always receive taps — otherwise a neighbouring base could be
+            covered by the selected cell's layout and become unclickable. */}
         <g id="nodes">
-          {Object.keys(graph).map(nodeId => {
+          {Object.keys(graph).sort((a, b) => {
+            const rank = (id) => (highlightedNodes.includes(id) ? 2 : id === selectedNode ? 1 : 0);
+            return rank(a) - rank(b);
+          }).map(nodeId => {
             const node = graph[nodeId];
             const state = boardState[nodeId] || { occupyingFaction: null, troops: 0 };
             const isHq = node.type === 'hq';
@@ -291,7 +297,7 @@ export default function Board({
                   </text>
                   {renderShields(state.shields, -30)}
                   {isHighlighted && (
-                    <circle r="52" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" strokeDasharray="5,5" className="animate-spin" style={{ animationDuration: '10s' }} />
+                    <circle r="52" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" strokeDasharray="5,5" className="animate-spin" style={{ animationDuration: '10s', pointerEvents: 'none' }} />
                   )}
                 </g>
               );
@@ -357,7 +363,7 @@ export default function Board({
 
                   {/* Action Highlights */}
                   {isHighlighted && (
-                    <circle r="44" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="4,4" className="animate-pulse" />
+                    <circle r="44" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="4,4" className="animate-pulse" style={{ pointerEvents: 'none' }} />
                   )}
                 </g>
               );
@@ -411,7 +417,7 @@ export default function Board({
                   {renderShields(state.shields, -26)}
 
                   {isHighlighted && (
-                    <circle r="32" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="3,3" className="animate-pulse" />
+                    <circle r="32" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" strokeDasharray="3,3" className="animate-pulse" style={{ pointerEvents: 'none' }} />
                   )}
                 </g>
               );
@@ -451,10 +457,10 @@ export default function Board({
                   )}
 
                   {isHighlighted && (
-                    <circle r="20" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" className="animate-pulse" />
+                    <circle r="20" fill="none" stroke="var(--neon-cyan)" strokeWidth="1.5" className="animate-pulse" style={{ pointerEvents: 'none' }} />
                   )}
                   {isSelected && (
-                    <circle r="22" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" className="animate-ping" style={{ animationDuration: '1.5s' }} />
+                    <circle r="22" fill="none" stroke="var(--neon-cyan)" strokeWidth="2" className="animate-ping" style={{ animationDuration: '1.5s', pointerEvents: 'none' }} />
                   )}
                 </g>
               );
@@ -506,9 +512,10 @@ export default function Board({
                     stroke="var(--neon-cyan)"
                     strokeWidth="1.5"
                     className="animate-pulse"
+                    style={{ pointerEvents: 'none' }}
                   />
                 )}
-                
+
                 {/* Double pulse for selected platoon */}
                 {isSelected && (
                   <circle
@@ -517,7 +524,7 @@ export default function Board({
                     stroke="var(--neon-cyan)"
                     strokeWidth="2"
                     className="animate-ping"
-                    style={{ animationDuration: '1.5s' }}
+                    style={{ animationDuration: '1.5s', pointerEvents: 'none' }}
                   />
                 )}
               </g>
