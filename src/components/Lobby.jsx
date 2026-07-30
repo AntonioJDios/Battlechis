@@ -26,6 +26,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   const [invites, setInvites] = useState(null); // game invitations received (null = not loaded)
   const [friends, setFriends] = useState(null); // friend circle (for inviting)
   const [invited, setInvited] = useState({});   // friendId -> true once a push invite is sent
+  const [showShare, setShowShare] = useState(false); // reveal code/link (kept at the bottom)
   const linkRef = React.useRef(null);
 
   // Load the friend circle when we enter the waiting room (to invite them).
@@ -206,35 +207,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     return (
       <Shell onBack={onBack} title="Sala de espera">
         <div className="flex flex-col gap-4">
-          <div className="text-center">
-            <div className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-1">Código de invitación</div>
-            <button
-              onClick={copyCode}
-              className="inline-flex items-center gap-3 px-5 py-3 rounded-lg border border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-900/30 transition-all"
-            >
-              <span className="font-tactical text-3xl font-black text-cyan-400 tracking-[6px]">{game.code}</span>
-              {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
-            </button>
-            <div className="font-mono text-[9px] text-gray-500 mt-2">Compártelo con tus amigos para que se unan</div>
-            <button
-              onClick={shareLink}
-              className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold mt-3 inline-flex items-center gap-2"
-            >
-              {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
-              {copied ? '¡Copiado!' : 'Compartir enlace'}
-            </button>
-            {/* Always-visible, selectable link (works even on insecure http LAN, where clipboard is blocked) */}
-            <input
-              ref={linkRef}
-              readOnly
-              value={inviteLink}
-              onFocus={(e) => e.target.select()}
-              onClick={(e) => e.target.select()}
-              className="w-full mt-2 bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 text-center focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
-          <div className="border-t border-slate-800 pt-3">
+          <div>
             <div className="font-tactical text-[10px] text-gray-400 uppercase tracking-wider mb-2">Comandantes</div>
             <div className="flex flex-col gap-2">
               {seats.map((s, i) => (
@@ -335,6 +308,35 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
             );
           })()}
           {err && <p className="font-mono text-[10px] text-red-400 text-center">{err}</p>}
+
+          {/* Share by link / code — kept compact at the bottom (in-app invites
+              are the main way now). Tap to reveal. */}
+          <div className="border-t border-slate-800 pt-3">
+            <button
+              onClick={() => setShowShare((v) => !v)}
+              className="w-full flex items-center justify-center gap-2 text-slate-400 font-mono text-[11px] hover:text-cyan-300 transition-all"
+            >
+              <Share2 className="w-4 h-4" /> Compartir por enlace / código {showShare ? '▲' : '▼'}
+            </button>
+            {showShare && (
+              <div className="mt-3 flex flex-col items-center gap-2 animate-fade-in">
+                <button onClick={copyCode}
+                  className="inline-flex items-center gap-3 px-5 py-2.5 rounded-lg border border-cyan-500/40 bg-cyan-950/20 hover:bg-cyan-900/30 transition-all">
+                  <span className="font-tactical text-2xl font-black text-cyan-400 tracking-[6px]">{game.code}</span>
+                  {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
+                </button>
+                <button onClick={shareLink}
+                  className="btn-tactical border-cyan-400 text-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/20 py-2 px-4 text-xs font-bold inline-flex items-center gap-2">
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+                  {copied ? '¡Copiado!' : 'Compartir enlace'}
+                </button>
+                <input ref={linkRef} readOnly value={inviteLink}
+                  onFocus={(e) => e.target.select()} onClick={(e) => e.target.select()}
+                  className="w-full bg-[#0a0d16] border border-slate-800 rounded px-2 py-1.5 font-mono text-[10px] text-cyan-300 text-center focus:outline-none focus:border-cyan-500" />
+                <p className="font-mono text-[9px] text-gray-600">Ojo: abrir el enlace fuera de la app (WhatsApp) puede fallar; mejor invita por 🎮 arriba.</p>
+              </div>
+            )}
+          </div>
         </div>
       </Shell>
     );
@@ -549,12 +551,10 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   );
 }
 
+// No card box: fills the width and scrolls with the page, not inside a box.
 function Shell({ title, children, onBack }) {
   return (
-    <div
-      className="w-full max-w-md border border-cyan-500/20 rounded bg-[#101424]/95 backdrop-blur-md p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] animate-fade-in"
-      style={{ maxHeight: 'calc(100dvh - 20px)', overflowY: 'auto' }}
-    >
+    <div className="w-full max-w-lg mx-auto p-4 animate-fade-in">
       <div className="flex items-center gap-2 mb-3">
         <button onClick={onBack} className="p-1.5 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-slate-700 transition-all shrink-0">
           <ArrowLeft className="w-4 h-4" />
