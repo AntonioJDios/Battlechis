@@ -44,7 +44,7 @@ export default function SiegeModal({ siegeState, onRoll, players, currentTurn, g
         style={{
           pointerEvents: 'all',
           width: 'min(340px, 92vw)',
-          maxHeight: 'calc(100vh - 32px)',
+          maxHeight: 'calc(100dvh - 32px)',
           overflowY: 'auto',
           background: '#0f121d',
           border: '1px solid rgba(245,158,11,0.4)',

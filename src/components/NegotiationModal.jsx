@@ -34,7 +34,7 @@ export default function NegotiationModal({ negotiationState, onRespond, players,
         style={{
           pointerEvents: 'all',
           width: 'min(360px, 92vw)',
-          maxHeight: 'calc(100vh - 32px)',
+          maxHeight: 'calc(100dvh - 32px)',
           overflowY: 'auto',
           background: '#0f121d',
           border: `2px solid ${defColor}`,

@@ -41,7 +41,7 @@ export default function ConquestModal({ conquestState, onRoll, players, currentT
       style={{
         pointerEvents: 'all',
         width: 'min(340px, 92vw)',
-        maxHeight: 'calc(100vh - 32px)',
+        maxHeight: 'calc(100dvh - 32px)',
         overflowY: 'auto',
         background: '#0f121d',
         border: '1px solid rgba(0,240,255,0.35)',

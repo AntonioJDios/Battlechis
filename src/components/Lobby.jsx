@@ -553,7 +553,7 @@ function Shell({ title, children, onBack }) {
   return (
     <div
       className="w-full max-w-md border border-cyan-500/20 rounded bg-[#101424]/95 backdrop-blur-md p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] animate-fade-in"
-      style={{ maxHeight: 'calc(100vh - 20px)', overflowY: 'auto' }}
+      style={{ maxHeight: 'calc(100dvh - 20px)', overflowY: 'auto' }}
     >
       <div className="flex items-center gap-2 mb-3">
         <button onClick={onBack} className="p-1.5 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-slate-700 transition-all shrink-0">

@@ -77,7 +77,7 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
       <div
         className="animate-fade-in"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(380px, 92vw)', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, boxShadow: '0 0 40px rgba(0,240,255,0.2), 0 8px 32px rgba(0,0,0,0.7)' }}
+        style={{ width: 'min(380px, 92vw)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', background: '#0f121d', border: '1px solid rgba(0,240,255,0.35)', borderRadius: 8, boxShadow: '0 0 40px rgba(0,240,255,0.2), 0 8px 32px rgba(0,0,0,0.7)' }}
       >
         <div style={{ background: 'rgba(5,40,60,0.9)', padding: '8px 12px', borderBottom: '1px solid rgba(0,240,255,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Settings className="w-4 h-4 text-cyan-400" />

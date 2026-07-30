@@ -46,7 +46,7 @@ export default function GameControls({
         boxShadow: `0 0 24px ${factionColor}20, 0 8px 32px rgba(0,0,0,0.8)`,
         backdropFilter: 'blur(10px)',
         width: collapsed ? 'auto' : '200px',
-        maxHeight: 'calc(100vh - 76px)',
+        maxHeight: 'calc(100dvh - 76px)',
         overflowY: 'auto',
       }}
     >

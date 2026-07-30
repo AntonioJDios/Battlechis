@@ -24,7 +24,7 @@ export default function BombModal({ bombState, boardState, graph, players, curre
         style={{
           pointerEvents: 'all',
           width: 'min(380px, 94vw)',
-          maxHeight: 'calc(100vh - 24px)',
+          maxHeight: 'calc(100dvh - 24px)',
           overflowY: 'auto',
           background: '#0f121d',
           border: '2px solid rgba(239,68,68,0.6)',

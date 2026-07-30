@@ -437,14 +437,8 @@ export default function App() {
   // Render Setup Lobby Screen
   if (!gameStarted) {
     return (
-      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px', zIndex: 10 }}>
-        <div className="w-full max-w-lg my-auto border border-cyan-500/20 rounded bg-[#101424]/90 backdrop-blur-md p-3 sm:p-4 shadow-[0_0_50px_rgba(0,240,255,0.15)] relative overflow-hidden animate-fade-in">
-
-          {/* Top corner design markers */}
-          <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-cyan-400"></div>
-          <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-cyan-400"></div>
-          <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-cyan-400"></div>
-          <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-cyan-400"></div>
+      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: '#07090f', zIndex: 10 }}>
+        <div className="min-h-full w-full flex flex-col justify-center gap-3 p-3 sm:p-5 relative animate-fade-in">
 
           {/* iOS install instructions */}
           {showIosHelp && (
@@ -816,7 +810,7 @@ export default function App() {
   return (
     <div
       className="grid-lines text-gray-300"
-      style={{ width: '100vw', height: '100vh', display: 'grid', gridTemplateRows: 'auto 1fr', background: '#07090f', overflow: 'hidden' }}
+      style={{ width: '100vw', height: '100dvh', display: 'grid', gridTemplateRows: 'auto 1fr', background: '#07090f', overflow: 'hidden' }}
     >
       {/* Top Navigation HUD Bar */}
       <header className="game-header h-14 border-b border-slate-900 bg-[#0e111c]/90 flex items-center justify-between px-4 relative z-10">
@@ -1086,7 +1080,7 @@ export default function App() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 490, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <div
             className="tactical-panel animate-fade-in"
-            style={{ pointerEvents: 'all', width: 'min(400px, 96vw)', maxHeight: 'calc(100vh - 60px)', overflowY: 'auto', background: '#0d101a', borderColor: 'rgba(100,120,180,0.4)', borderRadius: '10px', boxShadow: '0 0 40px rgba(0,0,0,0.8)' }}
+            style={{ pointerEvents: 'all', width: 'min(400px, 96vw)', maxHeight: 'calc(100dvh - 60px)', overflowY: 'auto', background: '#0d101a', borderColor: 'rgba(100,120,180,0.4)', borderRadius: '10px', boxShadow: '0 0 40px rgba(0,0,0,0.8)' }}
           >
             <div className="panel-header bg-[#151a30] flex items-center justify-between">
               <span>⚔️ ESTADO DE MANDOS</span>
