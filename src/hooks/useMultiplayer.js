@@ -32,6 +32,15 @@ function urlBase64ToUint8Array(base64String) {
   return arr;
 }
 
+// PostgREST returns PGRST202 (or "function … does not exist") when an RPC isn't
+// created yet (account schema not re-run). Lets the client fall back gracefully
+// so a client deploy is safe even before the SQL is applied.
+function isMissingFn(err) {
+  if (!err) return false;
+  return err.code === 'PGRST202' || err.code === '42883'
+    || /find the function|does not exist|schema cache/i.test(err.message || '');
+}
+
 // Short, human-friendly invite code (no ambiguous chars like 0/O/1/I).
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function makeCode(len = 5) {
@@ -53,7 +62,10 @@ function makeCode(len = 5) {
  */
 export function useMultiplayer() {
   const [userId, setUserId] = useState(null);
-  const [game, setGame] = useState(null); // { id, code, status, member_ids, state, host_id }
+  const [accountId, setAccountId] = useState(null); // stable account id (survives device changes)
+  const accountIdRef = useRef(null);
+  useEffect(() => { accountIdRef.current = accountId; }, [accountId]);
+  const [game, setGame] = useState(null); // { id, code, status, member_ids, member_accounts, state, host_id, host_account }
   const [error, setError] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [profile, setProfile] = useState(loadLocalProfile);
@@ -79,42 +91,44 @@ export function useMultiplayer() {
     return data.user.id;
   }, []);
 
+  // Resolve MY account (nickname/avatar/friend code + stable account_id) for this
+  // device. A device links to an account via battlechis_account_devices, so a
+  // logged-in account follows you across phones. Falls back to the legacy per-uid
+  // profile row if the account RPC isn't there yet (schema not re-run).
+  const refreshAccount = useCallback(async () => {
+    const apply = (a) => setProfile((p) => {
+      const next = {
+        ...p,
+        nickname: a.nickname ?? p.nickname,
+        avatar: a.avatar ?? p.avatar,
+        friendCode: a.friend_code ?? p.friendCode,
+        hasPassword: !!a.has_password,
+      };
+      try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+    try {
+      const { data, error } = await supabase.rpc('battlechis_my_account');
+      if (!error && Array.isArray(data) && data[0]) {
+        setAccountId(data[0].account_id || null);
+        apply(data[0]);
+        return data[0].account_id || null;
+      }
+    } catch { /* fall through to legacy */ }
+    // Legacy fallback (schema not re-run yet): read the per-uid profile row.
+    try {
+      const uid = await ensureAuth();
+      const { data } = await supabase.from(PROFILE_TABLE)
+        .select('nickname, avatar, has_password, friend_code').eq('user_id', uid).maybeSingle();
+      if (data) apply(data);
+    } catch { /* ignore */ }
+    return null;
+  }, [ensureAuth]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    ensureAuth().then(async (uid) => {
-      // 1) Basic profile (nickname/avatar/has_password) — always available.
-      try {
-        const { data } = await supabase.from(PROFILE_TABLE).select('nickname, avatar, has_password').eq('user_id', uid).maybeSingle();
-        if (data) {
-          setProfile((p) => {
-            const next = { ...p, nickname: data.nickname ?? p.nickname, avatar: data.avatar ?? p.avatar, hasPassword: !!data.has_password };
-            try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
-            return next;
-          });
-        }
-      } catch { /* ignore */ }
-      // 2) Friend code — needs the friends schema; skip gracefully if not there.
-      try {
-        const { data, error } = await supabase.from(PROFILE_TABLE).select('friend_code').eq('user_id', uid).maybeSingle();
-        if (error) return; // column missing (schema not re-run yet) → link stays "Generando…"
-        let friendCode = data?.friend_code || null;
-        if (!friendCode) {
-          friendCode = makeCode(5);
-          const { error: fcErr } = await supabase.from(PROFILE_TABLE).upsert({
-            user_id: uid,
-            friend_code: friendCode,
-            ...(data ? {} : { avatar: profileRef.current.avatar || DEFAULT_AVATAR }), // nickname stays null until chosen
-          });
-          if (fcErr) return; // rare code clash → retry next load
-        }
-        setProfile((p) => {
-          const next = { ...p, friendCode };
-          try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
-          return next;
-        });
-      } catch { /* ignore */ }
-    }).catch((e) => setError(e.message));
-  }, [ensureAuth]);
+    ensureAuth().then(() => refreshAccount()).catch((e) => setError(e.message));
+  }, [ensureAuth, refreshAccount]);
 
   // ── Save this device's profile (unique nickname + avatar): local + DB ──
   const saveProfile = useCallback(async ({ nickname, avatar }) => {
@@ -129,22 +143,35 @@ export function useMultiplayer() {
     }
     try {
       const uid = await ensureAuth();
-      const { error: upErr } = await supabase.from(PROFILE_TABLE)
-        .upsert({ user_id: uid, nickname: name, avatar: av, updated_at: new Date().toISOString() });
-      if (upErr) {
-        if (upErr.code === '23505' || /duplicate|unique/i.test(upErr.message || '')) {
-          return { ok: false, msg: `El nombre "${name}" ya está cogido, elige otro.` };
+      // Server creates the account (+ device link) or updates it; keeps the
+      // stable account_id so the profile follows you across devices.
+      const { data, error: rpcErr } = await supabase.rpc('battlechis_save_account', { p_name: name, p_avatar: av });
+      if (rpcErr && isMissingFn(rpcErr)) {
+        // Account schema not re-run yet → legacy per-device upsert (still works).
+        const { error: upErr } = await supabase.from(PROFILE_TABLE)
+          .upsert({ user_id: uid, nickname: name, avatar: av, updated_at: new Date().toISOString() });
+        if (upErr) {
+          if (upErr.code === '23505' || /duplicate|unique/i.test(upErr.message || '')) return { ok: false, msg: `El nombre "${name}" ya está cogido, elige otro.` };
+          return { ok: false, msg: upErr.message };
         }
-        return { ok: false, msg: upErr.message };
+        const next = { ...profileRef.current, nickname: name, avatar: av };
+        setProfile(next);
+        try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
+        return { ok: true };
       }
-      // Read it back so we only report success once it's really in the DB.
-      const { data: check, error: chkErr } = await supabase.from(PROFILE_TABLE)
-        .select('nickname, avatar').eq('user_id', uid).maybeSingle();
-      if (chkErr) return { ok: false, msg: chkErr.message };
-      if (!check || check.nickname !== name || check.avatar !== av) {
-        return { ok: false, msg: 'No se pudo confirmar el guardado en el servidor.' };
+      if (rpcErr) {
+        if (/TAKEN/.test(rpcErr.message)) return { ok: false, msg: `El nombre "${name}" ya está cogido, elige otro.` };
+        if (/SHORT_NAME/.test(rpcErr.message)) return { ok: false, msg: 'Elige un nombre (mínimo 2 letras).' };
+        return { ok: false, msg: rpcErr.message };
       }
-      const next = { ...profileRef.current, nickname: name, avatar: av };
+      const a = Array.isArray(data) ? data[0] : data;
+      if (a?.account_id) setAccountId(a.account_id);
+      const next = {
+        ...profileRef.current,
+        nickname: a?.nickname || name,
+        avatar: a?.avatar || av,
+        friendCode: a?.friend_code ?? profileRef.current.friendCode,
+      };
       setProfile(next);
       try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
     } catch (e) { return { ok: false, msg: e.message }; }
@@ -176,16 +203,21 @@ export function useMultiplayer() {
     if (!n || !p) return { ok: false, msg: 'Escribe nombre y contraseña.' };
     try {
       await ensureAuth();
-      const { data, error } = await supabase.rpc('battlechis_claim_profile', { p_name: n, p_password: p });
+      // Log in = LINK this device to the account (does not move it). Several
+      // devices can be linked to the same account at once.
+      let { data, error } = await supabase.rpc('battlechis_link_account', { p_name: n, p_password: p });
+      if (error && isMissingFn(error)) {
+        // Account schema not re-run yet → legacy claim (moves the profile here).
+        ({ data, error } = await supabase.rpc('battlechis_claim_profile', { p_name: n, p_password: p }));
+      }
       if (error) return { ok: false, msg: /INVALID/.test(error.message) ? 'Nombre o contraseña incorrectos.' : error.message };
-      const row = Array.isArray(data) ? data[0] : data;
-      const uid = await ensureAuth();
-      const { data: pr } = await supabase.from(PROFILE_TABLE).select('nickname, avatar, friend_code, has_password').eq('user_id', uid).maybeSingle();
+      const a = Array.isArray(data) ? data[0] : data;
+      if (a?.account_id) setAccountId(a.account_id);
       const next = {
-        nickname: pr?.nickname || row?.nickname || n,
-        avatar: pr?.avatar || row?.avatar || DEFAULT_AVATAR,
-        friendCode: pr?.friend_code || null,
-        hasPassword: pr?.has_password ?? true,
+        nickname: a?.nickname || n,
+        avatar: a?.avatar || DEFAULT_AVATAR,
+        friendCode: a?.friend_code || null,
+        hasPassword: a?.has_password ?? true,
       };
       setProfile(next);
       try { localStorage.setItem('bc_profile', JSON.stringify(next)); } catch { /* ignore */ }
@@ -198,6 +230,7 @@ export function useMultiplayer() {
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     try { localStorage.removeItem('bc_profile'); localStorage.removeItem('bc_name'); } catch { /* ignore */ }
     setProfile({ nickname: '', avatar: DEFAULT_AVATAR, friendCode: null, hasPassword: false });
+    setAccountId(null);
     try {
       const { data } = await supabase.auth.signInAnonymously();
       if (data?.user) setUserId(data.user.id);
@@ -387,7 +420,7 @@ export function useMultiplayer() {
     if (seats.some((s) => s.type === 'human' && !s.userId)) return { ok: true }; // already room
     const botIdx = seats.findIndex((s) => s.type === 'bot');
     if (botIdx === -1) return { ok: false, msg: 'La partida ya está llena de jugadores humanos.' };
-    seats[botIdx] = { ...seats[botIdx], type: 'human', userId: null };
+    seats[botIdx] = { ...seats[botIdx], type: 'human', userId: null, accountId: null };
     const { data, error: upErr } = await supabase
       .from(TABLE).update({ state: { ...row.state, seats } }).eq('id', gameId).select().single();
     if (upErr) return { ok: false, msg: upErr.message };
@@ -439,19 +472,21 @@ export function useMultiplayer() {
     setError(null);
     try {
       const uid = await ensureAuth();
+      const acc = accountIdRef.current;
       const code = makeCode();
       // The host's device drives every LOCAL human seat (hotseat), so claim them
-      // all for this uid. ONLINE human seats stay open for others to join.
+      // all for this uid/account. ONLINE human seats stay open for others to join.
       const av = profileRef.current?.avatar || DEFAULT_AVATAR;
       const filledSeats = seats.map((s) => (
         s.type === 'human' && !s.online
-          ? { ...s, userId: uid, avatar: av }
-          : { ...s, userId: null }
+          ? { ...s, userId: uid, accountId: acc || null, avatar: av }
+          : { ...s, userId: null, accountId: null }
       ));
       const state = { ...initialState, seats: filledSeats };
       const { data, error: insErr } = await supabase
         .from(TABLE)
-        .insert({ code, status: 'waiting', host_id: uid, member_ids: [uid], state })
+        .insert({ code, status: 'waiting', host_id: uid, host_account: acc || null,
+                  member_ids: [uid], member_accounts: acc ? [acc] : [], state })
         .select()
         .single();
       if (insErr) throw insErr;
@@ -504,12 +539,14 @@ export function useMultiplayer() {
   // the pg_cron job (or manually with the trash button).
   const listMyGames = useCallback(async () => {
     const uid = await ensureAuth();
-    const { data, error: selErr } = await supabase
-      .from(TABLE)
-      .select('*')
-      .contains('member_ids', [uid])
-      .order('updated_at', { ascending: false })
-      .limit(30);
+    const acc = accountIdRef.current;
+    let q = supabase.from(TABLE).select('*');
+    // Games belong to the account (any linked device sees them); fall back to the
+    // device uid for pre-account / anonymous games.
+    q = acc
+      ? q.or(`member_ids.cs.{${uid}},member_accounts.cs.{${acc}}`)
+      : q.contains('member_ids', [uid]);
+    const { data, error: selErr } = await q.order('updated_at', { ascending: false }).limit(30);
     if (selErr) { setError(selErr.message); return []; }
     return data || [];
   }, [ensureAuth]);
@@ -604,6 +641,7 @@ export function useMultiplayer() {
     setError(null);
     try {
       const uid = await ensureAuth();
+      const acc = accountIdRef.current;
       // Re-fetch fresh to reduce races when several people pick at once.
       const { data: row, error: selErr } = await supabase
         .from(TABLE).select('*').eq('id', gameId).single();
@@ -613,13 +651,15 @@ export function useMultiplayer() {
       const seats = [...(row.state?.seats ?? [])];
       const seat = seats[seatIndex];
       if (!seat || seat.type !== 'human') throw new Error('Ese puesto no es válido.');
-      if (seat.userId && seat.userId !== uid) throw new Error('Ese comandante ya está ocupado, elige otro.');
-      seats[seatIndex] = { ...seat, userId: uid, name: playerName || seat.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR };
+      const mine = (seat.accountId && acc && seat.accountId === acc) || seat.userId === uid;
+      if (seat.userId && !mine) throw new Error('Ese comandante ya está ocupado, elige otro.');
+      seats[seatIndex] = { ...seat, userId: uid, accountId: acc || null, name: playerName || seat.name, avatar: profileRef.current?.avatar || DEFAULT_AVATAR };
 
       const memberIds = Array.from(new Set([...(row.member_ids ?? []), uid]));
+      const memberAccounts = Array.from(new Set([...(row.member_accounts ?? []), ...(acc ? [acc] : [])]));
       const { data, error: updErr } = await supabase
         .from(TABLE)
-        .update({ member_ids: memberIds, state: { ...row.state, seats } })
+        .update({ member_ids: memberIds, member_accounts: memberAccounts, state: { ...row.state, seats } })
         .eq('id', row.id)
         .select()
         .single();
@@ -672,6 +712,7 @@ export function useMultiplayer() {
   return {
     available: isSupabaseConfigured,
     userId,
+    accountId,
     game,
     error,
     connecting,

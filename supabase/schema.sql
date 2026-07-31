@@ -370,3 +370,232 @@ insert into public.battlechis_config (key, value) values ('app_version', '1')
   on conflict (key) do nothing;
 -- Para forzar el aviso de "Actualizar" a todos:
 --   update public.battlechis_config set value = '2' where key = 'app_version';
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  IDENTIDAD POR CUENTA (multi-dispositivo)
+--  Antes: la identidad era el uid anónimo del móvil, e "iniciar sesión" MOVÍA el
+--  perfil de un uid a otro (un móvil a la vez). Ahora cada cuenta tiene un
+--  account_id ESTABLE; un móvil se VINCULA a la cuenta al iniciar sesión (varios
+--  móviles a la vez), y las partidas/asientos pertenecen a la CUENTA.
+--  Todo es ADITIVO y compatible: se conservan user_id / host_id / member_ids /
+--  seats.userId, así las partidas en curso siguen funcionando sin recargar.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- 1) account_id estable en cada perfil (= la cuenta). Se genera una vez y no cambia.
+alter table public.battlechis_profiles add column if not exists account_id uuid;
+update public.battlechis_profiles set account_id = gen_random_uuid() where account_id is null;
+alter table public.battlechis_profiles alter column account_id set default gen_random_uuid();
+alter table public.battlechis_profiles alter column account_id set not null;
+create unique index if not exists battlechis_profiles_account_uidx
+  on public.battlechis_profiles (account_id);
+grant select (account_id) on public.battlechis_profiles to anon, authenticated;
+
+-- 2) Vínculos móvil→cuenta. Cada dispositivo (uid) apunta a UNA cuenta; una
+--    cuenta puede tener VARIOS dispositivos vinculados a la vez.
+create table if not exists public.battlechis_account_devices (
+  device_uid uuid primary key,
+  account_id uuid not null,
+  created_at timestamptz not null default now()
+);
+alter table public.battlechis_account_devices enable row level security;
+drop policy if exists battlechis_account_devices_self on public.battlechis_account_devices;
+create policy battlechis_account_devices_self
+  on public.battlechis_account_devices for select
+  to authenticated using (device_uid = auth.uid());
+-- (Las escrituras van por funciones security definer; no hace falta policy de insert.)
+
+-- Sembrar vínculos para los perfiles ya existentes (cada uid → su cuenta).
+insert into public.battlechis_account_devices (device_uid, account_id)
+  select user_id, account_id from public.battlechis_profiles
+  on conflict (device_uid) do nothing;
+
+-- 3) Resolver: ¿qué cuenta es este dispositivo? Prioriza el vínculo; si no, el
+--    perfil propio del uid; null si es anónimo sin cuenta.
+create or replace function public.battlechis_my_account_id()
+returns uuid language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select d.account_id from public.battlechis_account_devices d where d.device_uid = auth.uid()),
+    (select p.account_id from public.battlechis_profiles p where p.user_id = auth.uid())
+  );
+$$;
+grant execute on function public.battlechis_my_account_id() to authenticated;
+
+-- Datos de MI cuenta (perfil + account_id) para el cliente en una sola llamada.
+create or replace function public.battlechis_my_account()
+returns table(account_id uuid, nickname text, avatar text, has_password boolean, friend_code text)
+language sql stable security definer set search_path = public as $$
+  select p.account_id, p.nickname, p.avatar, p.has_password, p.friend_code
+  from public.battlechis_profiles p
+  where p.account_id = public.battlechis_my_account_id();
+$$;
+grant execute on function public.battlechis_my_account() to authenticated;
+
+-- Adjunta a la cuenta las partidas en las que YA está este dispositivo, para que
+-- cualquier móvil vinculado las vea. Aditivo: conserva el uid en cada asiento.
+create or replace function public.battlechis_attach_games(p_dev uuid, p_account uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update public.battlechis_games
+     set member_accounts = (select array(select distinct e
+                              from unnest(coalesce(member_accounts,'{}') || array[p_account]) e))
+   where p_dev = any(member_ids);
+  update public.battlechis_games
+     set host_account = p_account
+   where host_id = p_dev and host_account is null;
+  update public.battlechis_games g
+     set state = jsonb_set(g.state, '{seats}', (
+       select jsonb_agg(case when seat->>'userId' = p_dev::text
+                             then jsonb_set(seat, '{accountId}', to_jsonb(p_account::text))
+                             else seat end)
+       from jsonb_array_elements(g.state->'seats') seat))
+   where g.state ? 'seats'
+     and exists (select 1 from jsonb_array_elements(g.state->'seats') s where s->>'userId' = p_dev::text);
+end;
+$$;
+
+-- 4) Crear/editar MI cuenta (nombre único + avatar). Si no tengo cuenta la crea y
+--    vincula este dispositivo; si ya tengo, la actualiza.
+create or replace function public.battlechis_save_account(p_name text, p_avatar text)
+returns table(account_id uuid, nickname text, avatar text, friend_code text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_dev  uuid := auth.uid();
+  v_acc  uuid := public.battlechis_my_account_id();
+  v_name text := btrim(p_name);
+  v_av   text := coalesce(nullif(btrim(p_avatar), ''), '🎖️');
+begin
+  if v_dev is null then raise exception 'NO_AUTH'; end if;
+  if length(v_name) < 2 then raise exception 'SHORT_NAME'; end if;
+  -- ¿nombre libre (o ya mío)?
+  if exists (select 1 from public.battlechis_profiles p
+             where lower(p.nickname) = lower(v_name)
+               and (v_acc is null or p.account_id <> v_acc)) then
+    raise exception 'TAKEN';
+  end if;
+  if v_acc is null then
+    -- Cuenta nueva: genera friend_code único (reintenta ante choque raro).
+    loop
+      begin
+        insert into public.battlechis_profiles (user_id, account_id, nickname, avatar, friend_code)
+          values (v_dev, gen_random_uuid(), v_name, v_av,
+                  upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)))
+          returning battlechis_profiles.account_id into v_acc;   -- cualificado: evita chocar con la col de salida
+        exit;
+      exception when unique_violation then
+        if exists (select 1 from public.battlechis_profiles p where lower(p.nickname) = lower(v_name)) then
+          raise exception 'TAKEN';   -- carrera de nombre
+        end if;
+        -- si no, fue el friend_code: reintenta el bucle
+      end;
+    end loop;
+    insert into public.battlechis_account_devices (device_uid, account_id)
+      values (v_dev, v_acc)
+      on conflict (device_uid) do update set account_id = excluded.account_id;
+  else
+    update public.battlechis_profiles
+       set nickname = v_name, avatar = v_av, updated_at = now()
+     where account_id = v_acc;
+  end if;
+  perform public.battlechis_attach_games(v_dev, v_acc);
+  return query select p.account_id, p.nickname, p.avatar, p.friend_code
+               from public.battlechis_profiles p where p.account_id = v_acc;
+end;
+$$;
+grant execute on function public.battlechis_save_account(text, text) to authenticated;
+
+-- Iniciar sesión = VINCULAR este dispositivo a una cuenta existente (no la mueve).
+create or replace function public.battlechis_link_account(p_name text, p_password text)
+returns table(account_id uuid, nickname text, avatar text, friend_code text, has_password boolean)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_dev uuid := auth.uid();
+  v_acc uuid;
+begin
+  if v_dev is null then raise exception 'NO_AUTH'; end if;
+  select p.account_id into v_acc from public.battlechis_profiles p
+    where lower(p.nickname) = lower(btrim(p_name))
+      and p.pass_hash is not null and p.pass_hash = crypt(p_password, p.pass_hash);
+  if v_acc is null then raise exception 'INVALID'; end if;
+  insert into public.battlechis_account_devices (device_uid, account_id)
+    values (v_dev, v_acc)
+    on conflict (device_uid) do update set account_id = excluded.account_id;
+  perform public.battlechis_attach_games(v_dev, v_acc);
+  return query select p.account_id, p.nickname, p.avatar, p.friend_code, p.has_password
+               from public.battlechis_profiles p where p.account_id = v_acc;
+end;
+$$;
+grant execute on function public.battlechis_link_account(text, text) to authenticated;
+
+-- La contraseña se pone/cambia en la CUENTA (afecta a todos sus dispositivos).
+create or replace function public.battlechis_set_password(p_password text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare v_acc uuid := public.battlechis_my_account_id();
+begin
+  if auth.uid() is null then raise exception 'NO_AUTH'; end if;
+  if v_acc is null then raise exception 'NO_ACCOUNT'; end if;
+  if length(coalesce(p_password, '')) < 3 then raise exception 'SHORT'; end if;
+  update public.battlechis_profiles
+     set pass_hash = crypt(p_password, gen_salt('bf')), has_password = true, updated_at = now()
+   where account_id = v_acc;
+end;
+$$;
+
+-- El resultado de la partida se suma a la CUENTA (por account_id).
+create or replace function public.battlechis_record_result(won boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_acc uuid := public.battlechis_my_account_id();
+begin
+  if v_acc is null then return; end if;   -- anónimo sin cuenta: no se registra
+  update public.battlechis_profiles
+     set games_played = games_played + 1,
+         games_won    = games_won + case when won then 1 else 0 end,
+         updated_at   = now()
+   where account_id = v_acc;
+end;
+$$;
+
+-- 5) Partidas por CUENTA (aditivo; se conservan host_id / member_ids / seats.userId).
+alter table public.battlechis_games add column if not exists member_accounts uuid[] not null default '{}';
+alter table public.battlechis_games add column if not exists host_account uuid;
+
+-- Backfill: mapear los uids ya presentes a sus cuentas.
+update public.battlechis_games g
+   set host_account = (select p.account_id from public.battlechis_profiles p where p.user_id = g.host_id)
+ where g.host_account is null;
+update public.battlechis_games g
+   set member_accounts = coalesce((
+        select array_agg(distinct p.account_id)
+        from unnest(g.member_ids) mid
+        join public.battlechis_profiles p on p.user_id = mid), '{}'::uuid[])
+ where cardinality(g.member_accounts) = 0;
+update public.battlechis_games g
+   set state = jsonb_set(g.state, '{seats}', (
+        select jsonb_agg(
+          case when nullif(seat->>'userId', '') is not null
+                    and (select p.account_id from public.battlechis_profiles p
+                         where p.user_id = (seat->>'userId')::uuid) is not null
+               then jsonb_set(seat, '{accountId}',
+                      to_jsonb((select p.account_id from public.battlechis_profiles p
+                                where p.user_id = (seat->>'userId')::uuid)::text))
+               else seat end)
+        from jsonb_array_elements(g.state->'seats') seat))
+ where g.state ? 'seats'
+   and jsonb_typeof(g.state->'seats') = 'array'
+   and jsonb_array_length(g.state->'seats') > 0;
+
+-- RLS re-declarada: acceso por uid (compatibilidad) O por cuenta (nuevo).
+drop policy if exists battlechis_games_select on public.battlechis_games;
+create policy battlechis_games_select on public.battlechis_games for select to authenticated
+  using (auth.uid() = any(member_ids) or status = 'waiting'
+         or public.battlechis_my_account_id() = any(member_accounts));
+drop policy if exists battlechis_games_update on public.battlechis_games;
+create policy battlechis_games_update on public.battlechis_games for update to authenticated
+  using (auth.uid() = any(member_ids) or status = 'waiting'
+         or public.battlechis_my_account_id() = any(member_accounts))
+  with check (auth.uid() = any(member_ids)
+              or public.battlechis_my_account_id() = any(member_accounts));
+drop policy if exists battlechis_games_delete on public.battlechis_games;
+create policy battlechis_games_delete on public.battlechis_games for delete to authenticated
+  using (auth.uid() = any(member_ids)
+         or public.battlechis_my_account_id() = any(member_accounts));

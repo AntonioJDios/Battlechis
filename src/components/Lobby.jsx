@@ -66,7 +66,8 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     try {
       const row = await mp.findGame(inv.code);
       const alreadyIn = (row.member_ids || []).includes(mp.userId)
-        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+        || (mp.accountId && (row.member_accounts || []).includes(mp.accountId))
+        || (row.state?.seats || []).some((s) => s.userId === mp.userId || (mp.accountId && s.accountId === mp.accountId));
       // Already joined → go straight to the room/game (don't ask to pick a seat).
       if (alreadyIn) {
         mp.dismissGameInvite(inv.id).catch(() => {}); // the invite is redundant now
@@ -101,7 +102,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
   };
 
   const game = mp.game;
-  const isHost = game && mp.userId === game.host_id;
+  const isHost = game && ((mp.accountId && game.host_account === mp.accountId) || mp.userId === game.host_id);
   const seats = game?.state?.seats ?? seatsConfig;
 
   const humanCount = seatsConfig.filter((s) => s.type === 'human').length;
@@ -127,7 +128,8 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
     try {
       const row = await mp.findGame(code);
       const alreadyIn = (row.member_ids || []).includes(mp.userId)
-        || (row.state?.seats || []).some((s) => s.userId === mp.userId);
+        || (mp.accountId && (row.member_accounts || []).includes(mp.accountId))
+        || (row.state?.seats || []).some((s) => s.userId === mp.userId || (mp.accountId && s.accountId === mp.accountId));
       // Already joined → go straight to the room/game (don't re-pick a seat).
       if (alreadyIn) {
         mp.reconnect(row);
@@ -541,7 +543,7 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                   {/* Only the host can delete an active game (avoids a player
                       accidentally nuking the shared game); anyone can clear a
                       finished one. */}
-                  {(g.host_id === mp.userId || g.status === 'finished') && (
+                  {(g.host_id === mp.userId || (mp.accountId && g.host_account === mp.accountId) || g.status === 'finished') && (
                     <button
                       onClick={() => delGame(g)}
                       title={g.status === 'finished' ? 'Borrar partida' : 'Borrar (para todos)'}

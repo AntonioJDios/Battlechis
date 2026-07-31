@@ -37,7 +37,9 @@ export default function App() {
   // the online authority config).
   const mp = useMultiplayer();
   const [onlineActive, setOnlineActive] = useState(false);
-  const iAmHost = !!(mp.game && mp.userId === mp.game.host_id);
+  const iAmHost = !!(mp.game && (
+    (mp.accountId && mp.game.host_account === mp.accountId) || mp.userId === mp.game.host_id
+  ));
   const onlineConfig = onlineActive ? { isOnline: true, isHost: iAmHost } : null;
 
   const {
@@ -96,8 +98,10 @@ export default function App() {
 
   // ── Online turn authority ──
   const seats = mp.game?.state?.seats ?? null;
+  // A seat is "mine" if it belongs to my account (any of my linked devices) or,
+  // for pre-account/anonymous games, to this device's uid.
   const myFactions = seats
-    ? seats.filter((s) => s.userId === mp.userId).map((s) => s.faction)
+    ? seats.filter((s) => (s.accountId && mp.accountId && s.accountId === mp.accountId) || s.userId === mp.userId).map((s) => s.faction)
     : [];
   const activeFaction = players[currentTurn]?.faction;
   const isMyTurn = !onlineActive || myFactions.includes(activeFaction);
