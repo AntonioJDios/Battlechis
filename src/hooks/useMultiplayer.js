@@ -263,6 +263,19 @@ export function useMultiplayer() {
     catch { /* best-effort */ }
   }, [ensureAuth]);
 
+  // ── Achievements / medals ──
+  const grantAchievement = useCallback(async (code) => {
+    if (!isSupabaseConfigured || !code) return;
+    try { await supabase.rpc('battlechis_grant_achievement', { p_code: code }); } catch { /* best-effort */ }
+  }, []);
+  const listAchievements = useCallback(async () => {
+    if (!isSupabaseConfigured) return [];
+    try {
+      const { data } = await supabase.rpc('battlechis_my_achievements');
+      return Array.isArray(data) ? data.map((r) => r.code).filter(Boolean) : [];
+    } catch { return []; }
+  }, []);
+
   // ── App version (from battlechis_config) to prompt updates ──
   const fetchAppVersion = useCallback(async () => {
     if (!isSupabaseConfigured) return null;
@@ -824,6 +837,8 @@ export function useMultiplayer() {
     pushEnabled,
     notify,
     nudge,
+    grantAchievement,
+    listAchievements,
     profile,
     fetchAppVersion,
     saveProfile,

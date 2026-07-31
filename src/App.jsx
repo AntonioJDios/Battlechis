@@ -22,6 +22,8 @@ import { FACTIONS } from './utils/boardGraph';
 import { APP_VERSION } from './version';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X, Home } from 'lucide-react';
 import ChatPanel from './components/ChatPanel';
+import Scoreboard from './components/Scoreboard';
+import { achievementsForWin } from './achievements';
 
 // Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
 // does NOT preserve key order — compares equal to our locally-built snapshot.
@@ -67,6 +69,7 @@ export default function App() {
     winner,
     shieldPurchasedThisTurn,
     brutalCards,
+    boardSize,
     startGame,
     rollMovement,
     handleNodeClick,
@@ -130,9 +133,23 @@ export default function App() {
     if (done.includes(gid)) return; // already counted (survives reloads)
     const won = Boolean(winner && myFactions.includes(winner.faction));
     mp.recordResult(won);
+    if (won) achievementsForWin(winner?.reason).forEach((code) => mp.grantAchievement(code));
     try { localStorage.setItem('bc_recorded', JSON.stringify([...done, gid].slice(-100))); } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, onlineActive, winner]);
+
+  // Entering an active game (e.g. a rematch reuses the same row) → allow the next
+  // finish to record stats/achievements again for this game id.
+  useEffect(() => {
+    if (!gameStarted || phase === 'GAME_OVER') return;
+    recordedRef.current = false;
+    const gid = mp.game?.id;
+    if (!gid) return;
+    try {
+      const d = JSON.parse(localStorage.getItem('bc_recorded') || '[]');
+      if (d.includes(gid)) localStorage.setItem('bc_recorded', JSON.stringify(d.filter((x) => x !== gid)));
+    } catch { /* ignore */ }
+  }, [gameStarted, phase, mp.game?.id]);
 
   // ── Road-crossing negotiation (defender modal / attacker resolution) ──
   const negDefender = negotiationState
@@ -212,6 +229,22 @@ export default function App() {
     try { await mp.nudge({ accountId: activeSeat.accountId, userId: activeSeat.userId }); } catch { /* ignore */ }
     setTimeout(() => setNudgeCd(false), 15000);
   };
+
+  // Rematch: replay with the same players/board/cards. Online → the host restarts
+  // and the fresh state is pushed to everyone (they're already members).
+  const rematchPushRef = React.useRef(false);
+  const handleRematch = () => {
+    startGame(players, { boardSize, brutalCards });
+    if (onlineActive) rematchPushRef.current = true;
+  };
+  useEffect(() => {
+    if (!rematchPushRef.current) return;
+    if (onlineActive && gameStarted && phase !== 'GAME_OVER' && mp.game?.id) {
+      rematchPushRef.current = false;
+      mp.pushState(mp.game.id, { ...getSnapshot(), seats: mp.game?.state?.seats }, 'playing');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, gameStarted]);
   const [troopsToMove, setTroopsToMove] = useState(1);
   const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
   // Game options chosen by the creator
@@ -605,6 +638,7 @@ export default function App() {
               pushEnabled={mp.pushEnabled}
               enablePush={mp.enablePush}
               disablePush={mp.disablePush}
+              listAchievements={mp.listAchievements}
               onClose={() => { setShowProfile(false); setOnboarded(true); }}
             />
           )}
@@ -1072,6 +1106,11 @@ export default function App() {
         {/* Left / Center Work Area (Board only) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0, overflow: 'hidden' }}>
 
+          {/* Live scoreboard: who's winning (always visible) */}
+          {gameStarted && phase !== 'GAME_OVER' && (
+            <Scoreboard players={players} boardState={boardState} getBasesCount={getBasesCount} currentTurn={currentTurn} />
+          )}
+
           {/* Online: spectator banner when it's not your turn (+ nudge button) */}
           {onlineActive && !isMyTurn && (
             <div className="w-full bg-slate-800/40 border border-slate-600/40 px-3 py-2 rounded text-slate-300 font-mono text-[10px] sm:text-xs flex items-center gap-2 shrink-0">
@@ -1389,13 +1428,25 @@ export default function App() {
               </>
             )}
 
-            <button
-              onClick={() => window.location.reload()}
-              className="btn-tactical border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20 py-3 px-8 w-full text-sm"
-              style={{ clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)' }}
-            >
-              Iniciar Nueva Campaña
-            </button>
+            <div className="flex flex-col gap-2">
+              {(!onlineActive || iAmHost) && (
+                <button
+                  onClick={handleRematch}
+                  className="btn-tactical border-cyan-400 text-cyan-300 bg-cyan-950/20 hover:bg-cyan-500/20 py-3 px-8 w-full text-sm font-bold"
+                >
+                  🔁 Revancha (mismos jugadores)
+                </button>
+              )}
+              {onlineActive && !iAmHost && (
+                <p className="text-[11px] text-gray-500 font-mono">Esperando a que el anfitrión inicie la revancha…</p>
+              )}
+              <button
+                onClick={() => window.location.reload()}
+                className="btn-tactical border-green-400 text-green-400 bg-green-950/20 hover:bg-green-500/20 py-2.5 px-8 w-full text-xs"
+              >
+                Volver al menú
+              </button>
+            </div>
           </div>
         </div>
         );

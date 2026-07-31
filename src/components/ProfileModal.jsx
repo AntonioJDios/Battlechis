@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Check, X, Loader2, LogIn } from 'lucide-react';
+import { ACHIEVEMENTS } from '../achievements';
 
 // Settings: identity without email (create a profile with a unique name +
 // password + avatar, or log in with name + password) plus notifications.
 const AVATARS = ['🎖️','⭐','🔥','💀','🐉','🦅','🐺','🦁','🐻','🦊','👑','⚔️','🛡️','🚀','⚡','🎯','🐢','🦈','🤖','👽','🐙','🦖'];
 
-export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, pushSupported, pushEnabled, enablePush, disablePush, onClose }) {
+export default function ProfileModal({ profile, onSave, checkNickname, setPassword, claimProfile, onLogout, pushSupported, pushEnabled, enablePush, disablePush, listAchievements, onClose }) {
   const [pushBusy, setPushBusy] = useState(false);
+  const [earned, setEarned] = useState([]);
   const [pushMsg, setPushMsg] = useState(null);
   const hasProfile = !!profile?.nickname;
   const [mode, setMode] = useState('edit'); // 'edit' (create/edit) | 'login'
@@ -23,6 +25,13 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!hasProfile || !listAchievements) return;
+    let alive = true;
+    listAchievements().then((codes) => { if (alive) setEarned(codes || []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [hasProfile, listAchievements]);
 
   const initial = React.useRef({ nickname: profile?.nickname || '', avatar: profile?.avatar || '🎖️' });
   const dirty = mode === 'edit' && (nickname !== initial.current.nickname || avatar !== initial.current.avatar || password.length > 0);
@@ -156,6 +165,29 @@ export default function ProfileModal({ profile, onSave, checkNickname, setPasswo
                 </button>
                 <p className="font-mono text-[9px] text-gray-600 mt-1">Avisos de tu turno, ataques e invitaciones aunque cierres la app.</p>
                 {pushMsg && <p className={`font-mono text-[9px] mt-1 ${pushMsg.ok ? 'text-green-400' : 'text-red-400'}`}>{pushMsg.text}</p>}
+              </div>
+            )}
+
+            {/* Achievements / medals */}
+            {hasProfile && (
+              <div className="border-t border-slate-800 pt-3">
+                <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">🏅 Logros ({earned.length}/{ACHIEVEMENTS.length})</label>
+                <div className="grid grid-cols-3 gap-1.5 mt-2">
+                  {ACHIEVEMENTS.map((a) => {
+                    const got = earned.includes(a.code);
+                    return (
+                      <div
+                        key={a.code}
+                        title={`${a.name} — ${a.desc}`}
+                        className="flex flex-col items-center text-center rounded p-1.5 border"
+                        style={{ borderColor: got ? 'rgba(245,208,0,0.5)' : 'rgba(255,255,255,0.06)', background: got ? 'rgba(245,208,0,0.08)' : 'rgba(255,255,255,0.02)', opacity: got ? 1 : 0.55 }}
+                      >
+                        <span className="text-xl leading-none">{got ? a.icon : '🔒'}</span>
+                        <span className="font-tactical text-[8px] text-gray-300 mt-1 leading-tight">{a.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

@@ -651,3 +651,61 @@ begin
   alter publication supabase_realtime add table public.battlechis_chat;
 exception when duplicate_object then null;
 end $$;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  LOGROS / MEDALLAS (por cuenta)
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.battlechis_achievements (
+  account_id uuid not null,
+  code       text not null,
+  earned_at  timestamptz not null default now(),
+  primary key (account_id, code)
+);
+alter table public.battlechis_achievements enable row level security;
+-- Legibles por todos (para enseñar medallas); solo se otorgan a TU cuenta vía RPC.
+drop policy if exists battlechis_achievements_read on public.battlechis_achievements;
+create policy battlechis_achievements_read on public.battlechis_achievements for select
+  to authenticated using (true);
+
+-- Otorgar una medalla a MI cuenta (idempotente).
+create or replace function public.battlechis_grant_achievement(p_code text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_acc uuid := public.battlechis_my_account_id();
+begin
+  if v_acc is null or coalesce(btrim(p_code),'') = '' then return; end if;
+  insert into public.battlechis_achievements (account_id, code)
+    values (v_acc, p_code) on conflict do nothing;
+end;
+$$;
+grant execute on function public.battlechis_grant_achievement(text) to authenticated;
+
+-- Las medallas de MI cuenta.
+create or replace function public.battlechis_my_achievements()
+returns table(code text, earned_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select a.code, a.earned_at from public.battlechis_achievements a
+  where a.account_id = public.battlechis_my_account_id();
+$$;
+grant execute on function public.battlechis_my_achievements() to authenticated;
+
+-- record_result ahora también otorga medallas por umbral (5 victorias, 10 partidas).
+create or replace function public.battlechis_record_result(won boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_acc uuid := public.battlechis_my_account_id(); v_gp int; v_gw int;
+begin
+  if v_acc is null then return; end if;
+  update public.battlechis_profiles
+     set games_played = games_played + 1,
+         games_won    = games_won + case when won then 1 else 0 end,
+         updated_at   = now()
+   where account_id = v_acc
+   returning games_played, games_won into v_gp, v_gw;
+  if v_gp >= 10 then
+    insert into public.battlechis_achievements (account_id, code) values (v_acc, 'played_10') on conflict do nothing;
+  end if;
+  if v_gw >= 5 then
+    insert into public.battlechis_achievements (account_id, code) values (v_acc, 'won_5') on conflict do nothing;
+  end if;
+end;
+$$;
