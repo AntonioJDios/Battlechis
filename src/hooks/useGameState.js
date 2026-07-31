@@ -67,6 +67,8 @@ export function useGameState(online = null) {
 
   // Alliances: array of {a: factionId, b: factionId}
   const [alliances, setAlliances] = useState([]);
+  // Pending alliance requests awaiting the other player's consent: {from, to}
+  const [allianceProposals, setAllianceProposals] = useState([]);
 
   // NÚCLEO domination tracker: {faction: null|id, turns: 0}
   const [nucleoData, setNucleoData] = useState({ faction: null, turns: 0 });
@@ -179,6 +181,8 @@ export function useGameState(online = null) {
     setShieldPurchasedThisTurn(false);
     setHands({});
     setWinner(null);
+    setAlliances([]);
+    setAllianceProposals([]);
 
     const firstPlayer = gamePlayers[0];
     const firstBases = Object.keys(initialBoard).filter(id => {
@@ -230,18 +234,49 @@ export function useGameState(online = null) {
     alliances.some(al => (al.a === factionA && al.b === factionB) || (al.a === factionB && al.b === factionA)),
   [alliances]);
 
-  const proposeAlliance = useCallback((factionA, factionB) => {
-    if (areAllied(factionA, factionB)) return;
-    setAlliances(prev => [...prev, { a: factionA, b: factionB }]);
-    const nameA = FACTIONS[factionA].name.split(' ')[0];
-    const nameB = FACTIONS[factionB].name.split(' ')[0];
-    addLog(`🤝 ALIANZA: ${nameA} y ${nameB} han firmado un pacto de no agresión.`, 'success');
-  }, [areAllied, addLog]);
+  const samePair = (x, fA, fB) =>
+    (x.a === fA && x.b === fB) || (x.a === fB && x.b === fA) ||
+    (x.from === fA && x.to === fB) || (x.from === fB && x.to === fA);
+
+  // Propose an alliance. A pact only takes effect with the OTHER side's consent,
+  // so proposing to a HUMAN just sends a request they must accept (no more
+  // one-sided pacts that let the "ally" walk through your land). Bots, having no
+  // UI, accept a non-aggression pact right away (as before).
+  const proposeAlliance = useCallback((factionFrom, factionTo) => {
+    if (areAllied(factionFrom, factionTo)) return;
+    const nameFrom = FACTIONS[factionFrom].name.split(' ')[0];
+    const nameTo = FACTIONS[factionTo].name.split(' ')[0];
+    const target = players.find(p => p.faction === factionTo);
+    if (target?.isBot) {
+      setAlliances(prev => [...prev, { a: factionFrom, b: factionTo }]);
+      addLog(`🤝 ALIANZA: ${nameFrom} y ${nameTo} han firmado un pacto de no agresión.`, 'success');
+      return;
+    }
+    setAllianceProposals(prev =>
+      prev.some(x => samePair(x, factionFrom, factionTo)) ? prev : [...prev, { from: factionFrom, to: factionTo }]);
+    addLog(`🤝 ${nameFrom} propone una alianza a ${nameTo}. Espera a que la acepte.`, 'info');
+  }, [areAllied, players, addLog]);
+
+  // The proposed player accepts → the pact becomes real.
+  const acceptAlliance = useCallback((factionFrom, factionTo) => {
+    setAllianceProposals(prev => prev.filter(x => !samePair(x, factionFrom, factionTo)));
+    setAlliances(prev => prev.some(al => samePair(al, factionFrom, factionTo))
+      ? prev : [...prev, { a: factionFrom, b: factionTo }]);
+    const nameFrom = FACTIONS[factionFrom].name.split(' ')[0];
+    const nameTo = FACTIONS[factionTo].name.split(' ')[0];
+    addLog(`🤝 ALIANZA: ${nameFrom} y ${nameTo} han firmado un pacto de no agresión.`, 'success');
+  }, [addLog]);
+
+  // The proposed player rejects → the request is dropped, no pact.
+  const rejectAlliance = useCallback((factionFrom, factionTo) => {
+    setAllianceProposals(prev => prev.filter(x => !samePair(x, factionFrom, factionTo)));
+    const nameTo = FACTIONS[factionTo].name.split(' ')[0];
+    addLog(`✋ ${nameTo} ha rechazado la propuesta de alianza.`, 'info');
+  }, [addLog]);
 
   const breakAlliance = useCallback((factionA, factionB) => {
-    setAlliances(prev => prev.filter(al =>
-      !((al.a === factionA && al.b === factionB) || (al.a === factionB && al.b === factionA))
-    ));
+    setAlliances(prev => prev.filter(al => !samePair(al, factionA, factionB)));
+    setAllianceProposals(prev => prev.filter(x => !samePair(x, factionA, factionB)));
     const nameA = FACTIONS[factionA].name.split(' ')[0];
     const nameB = FACTIONS[factionB].name.split(' ')[0];
     addLog(`💔 TRAICIÓN: ${nameA} ha roto la alianza con ${nameB}. ¡La guerra recomienza!`, 'error');
@@ -1665,11 +1700,11 @@ export function useGameState(online = null) {
     players, currentTurn, phase, boardState, diceRoll, sixCount,
     recruitmentTroops, logs, gameStarted, combatState, conquestState,
     surpriseState, siegeState, negotiationState, bombState, defenseState,
-    hands, winner, alliances, nucleoData, boardSize, brutalCards, surpriseDeck,
+    hands, winner, alliances, allianceProposals, nucleoData, boardSize, brutalCards, surpriseDeck,
   }), [players, currentTurn, phase, boardState, diceRoll, sixCount,
        recruitmentTroops, logs, gameStarted, combatState, conquestState,
        surpriseState, siegeState, negotiationState, bombState, defenseState,
-       hands, winner, alliances, nucleoData, boardSize, brutalCards, surpriseDeck]);
+       hands, winner, alliances, allianceProposals, nucleoData, boardSize, brutalCards, surpriseDeck]);
 
   const hydrate = useCallback((snap) => {
     if (!snap) return;
@@ -1693,6 +1728,7 @@ export function useGameState(online = null) {
     if (snap.hands !== undefined) setHands(snap.hands);
     if (snap.winner !== undefined) setWinner(snap.winner);
     if (snap.alliances !== undefined) setAlliances(snap.alliances);
+    if (snap.allianceProposals !== undefined) setAllianceProposals(snap.allianceProposals);
     if (snap.nucleoData !== undefined) setNucleoData(snap.nucleoData);
     // Board layout config must match so every client rebuilds the same graph.
     if (snap.boardSize !== undefined) setBoardSize(snap.boardSize);
@@ -1728,6 +1764,7 @@ export function useGameState(online = null) {
     brutalCards,
     boardSize,
     alliances,
+    allianceProposals,
     nucleoData,
     startGame,
     rollMovement,
@@ -1750,6 +1787,8 @@ export function useGameState(online = null) {
     retreatCombat,
     retreatDefender,
     proposeAlliance,
+    acceptAlliance,
+    rejectAlliance,
     breakAlliance,
     areAllied,
     addLog,

@@ -87,9 +87,12 @@ export default function App() {
     retreatCombat,
     retreatDefender,
     proposeAlliance,
+    acceptAlliance,
+    rejectAlliance,
     breakAlliance,
     areAllied,
     alliances,
+    allianceProposals,
     nucleoData,
     addLog,
     getSnapshot,
@@ -1230,14 +1233,26 @@ export default function App() {
                   {players.filter(p => p.faction !== players[currentTurn]?.faction && !p.eliminated).map(p => {
                     const myFaction = players[currentTurn]?.faction;
                     const allied = areAllied(myFaction, p.faction);
+                    // Pending requests either way between me and this player.
+                    const incoming = (allianceProposals || []).find(x => x.from === p.faction && x.to === myFaction); // they asked me
+                    const outgoing = (allianceProposals || []).find(x => x.from === myFaction && x.to === p.faction); // I asked them
+                    const btn = (bg, border, color) => ({ fontSize: 10, padding: '2px 8px', border: `1px solid ${border}`, borderRadius: 4, background: bg, color, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-tactical)', fontWeight: 700 });
                     return (
                       <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: allied ? 'rgba(0,230,118,0.06)' : 'rgba(255,255,255,0.03)', border: `1px solid ${allied ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)'}` }}>
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: FACTIONS[p.faction]?.neon, flexShrink: 0 }} />
                         <span className="font-tactical text-[10px] text-gray-300 flex-1 truncate">{p.name}</span>
-                        {allied
-                          ? <button onClick={() => breakAlliance(myFaction, p.faction)} style={{ fontSize: 10, padding: '2px 8px', border: '1px solid rgba(255,59,59,0.5)', borderRadius: 4, background: 'rgba(255,59,59,0.1)', color: '#f87171', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-tactical)', fontWeight: 700 }}>💔 Romper</button>
-                          : <button onClick={() => proposeAlliance(myFaction, p.faction)} style={{ fontSize: 10, padding: '2px 8px', border: '1px solid rgba(0,230,118,0.5)', borderRadius: 4, background: 'rgba(0,230,118,0.1)', color: '#4ade80', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-tactical)', fontWeight: 700 }}>🤝 Aliar</button>
-                        }
+                        {allied ? (
+                          <button onClick={guardAuth(() => breakAlliance(myFaction, p.faction))} style={btn('rgba(255,59,59,0.1)', 'rgba(255,59,59,0.5)', '#f87171')}>💔 Romper</button>
+                        ) : incoming ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={guardAuth(() => acceptAlliance(p.faction, myFaction))} style={btn('rgba(0,230,118,0.15)', 'rgba(0,230,118,0.6)', '#4ade80')}>✅ Aceptar</button>
+                            <button onClick={guardAuth(() => rejectAlliance(p.faction, myFaction))} style={btn('rgba(255,59,59,0.1)', 'rgba(255,59,59,0.4)', '#f87171')}>❌</button>
+                          </div>
+                        ) : outgoing ? (
+                          <span className="font-tactical text-[10px] text-amber-400/80" style={{ whiteSpace: 'nowrap' }}>⏳ Enviada</span>
+                        ) : (
+                          <button onClick={guardAuth(() => proposeAlliance(myFaction, p.faction))} style={btn('rgba(0,230,118,0.1)', 'rgba(0,230,118,0.5)', '#4ade80')}>🤝 Aliar</button>
+                        )}
                       </div>
                     );
                   })}
