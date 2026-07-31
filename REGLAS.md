@@ -20,11 +20,11 @@ Ser el último comandante en pie o dominar el sector. Ganas la partida si logras
 - **5 facciones**, cada una con su color:
   | Facción | Color |
   |---|---|
-  | ALPHA (Crimson) | 🔴 Rojo |
-  | DELTA (Blue Eagle) | 🔵 Azul |
-  | SIGMA (Lightning) | 🟡 Amarillo |
-  | GAMMA (Viper) | 🟢 Verde |
-  | OMEGA (Eclipse) | 🟣 Morado |
+  | Jugador Rojo | 🔴 Rojo |
+  | Jugador Azul | 🔵 Azul |
+  | Jugador Amarillo | 🟡 Amarillo |
+  | Jugador Verde | 🟢 Verde |
+  | Jugador Morado | 🟣 Morado |
 - **El tablero** tiene forma de estrella/pentagrama con tres tipos de posiciones:
   - **5 Cuarteles Generales (HQ)** — la base de cada facción, en el anillo exterior.
   - **5 Bases neutrales** — bases intermedias, entre el exterior y el centro.
@@ -211,9 +211,11 @@ El NÚCLEO es la posición más valiosa y está protegido:
 
 ## 🤝 Diplomacia (alianzas)
 
-- Puedes **proponer una alianza** (pacto de no agresión) con otro comandante.
-- Mientras dure la alianza, **no puedes atacar** a tu aliado ni él a ti.
-- Puedes **romper la alianza** en cualquier momento (¡traición!) para volver a atacarle.
+- En tu turno, desde el panel de **Diplomacia** (dentro del roster ⚔️), puedes **proponer una alianza** (pacto de no agresión) a otro comandante.
+- **La alianza NO es automática:** el otro tiene que **aceptarla**. Mientras no acepte, **no hay pacto** — a esa persona le aparece **✅ Aceptar / ❌** en su turno. (Así nadie te fuerza una alianza para colarse por tu territorio.)
+- Mientras dure la alianza, **no os podéis atacar** y **podéis cruzar** el territorio del otro **sin bloqueo**.
+- Puedes **romper la alianza** cuando quieras (¡traición!) para volver a atacarle.
+- Con un jugador **IA (bot)**, el pacto se acepta **al instante**.
 
 ---
 
@@ -251,6 +253,33 @@ La partida termina en cuanto un comandante cumple **cualquiera** de estas:
 | Requisito para atacar el NÚCLEO | 3 bases satélite |
 | Victoria por NÚCLEO | 3 turnos propios |
 | Victoria por dominación | 60 % de las bases |
+
+---
+
+## 🌐 Jugar online (cuentas, amigos, chat y avisos)
+
+*Estas no son reglas del juego de mesa, sino cómo funciona la versión online entre varios móviles.*
+
+### 👤 Tu cuenta (juega desde cualquier móvil)
+- Crea tu **perfil** con un **nombre único** y un **avatar**. Ponle una **contraseña** para poder usarlo en otros dispositivos.
+- **Iniciar sesión** con tu nombre + contraseña en cualquier móvil **vincula** ese móvil a tu cuenta: tus partidas, amigos y estadísticas te siguen. Puedes tener **varios móviles a la vez** con la misma cuenta.
+- Tus **partidas pertenecen a tu cuenta, no al móvil**: si cambias de teléfono, entras con tu cuenta y siguen ahí. (Un asiento lo lleva **un** dispositivo cada vez: no juguéis el mismo turno desde dos móviles de la misma cuenta a la vez.)
+
+### 🧑‍🤝‍🧑 Amigos e invitaciones
+- Busca a otros por su **nombre** y envía **solicitud de amistad** (se acepta dentro de la app, sin enlaces).
+- Invita a un amigo a tu partida directamente; le aparece en **"Mis partidas"**.
+- El **ranking** es de tu **círculo** (tú + tus amigos), ordenado por victorias.
+
+### 💬 Chat en partida
+- Botón **💬** en la partida: **mensajes rápidos**, **emojis** y **texto libre**.
+- Cualquiera escribe **en cualquier momento** (no solo en su turno) y se ve al instante en todos los móviles. Un globo rojo avisa de mensajes sin leer.
+
+### 🔔 Avisos (notificaciones)
+- Con las **notificaciones activadas** (Ajustes) recibes aviso cuando **es tu turno**, cuando **te atacan** o cuando hay un **cruce en tu territorio**, aunque tengas la app cerrada.
+- **👉 ¡Te tocaaaa!**: si es el turno de alguien y se demora, otro jugador puede darle un **toque** desde el banner de espera — le llega una notificación a **todos sus móviles**. Hay 15 s de margen entre toques para no abusar.
+
+### 🔄 Actualizaciones
+- Cuando hay una versión nueva, en la portada aparece el botón **🔄 Actualizar**; púlsalo para traerte la última versión al instante.
 
 ---
 
