@@ -414,25 +414,29 @@ export default function App() {
       // Push notifications (only the acting client runs this). Best-effort.
       try {
         const url = `${window.location.origin}/?join=${mp.game.code}`;
-        const seatUid = (f) => (seats || []).find((s) => s.faction === f && s.type === 'human' && s.userId)?.userId;
+        const seatOf = (f) => (seats || []).find((s) => s.faction === f && s.type === 'human' && (s.userId || s.accountId));
+        // Notify a seat's owner (all their devices via account), unless it's me.
+        const notifySeat = (st, extra) => {
+          if (!st) return;
+          const mine = (st.accountId && mp.accountId && st.accountId === mp.accountId) || st.userId === mp.userId;
+          if (mine) return;
+          mp.notify({ accountId: st.accountId, userId: st.userId, url, ...extra });
+        };
         // Turn handed to a different human → notify them.
         if (snap.currentTurn !== notifyRef.current.turn) {
           notifyRef.current.turn = snap.currentTurn;
           const cur = snap.players?.[snap.currentTurn];
-          const uid = cur && !cur.isBot ? seatUid(cur.faction) : null;
-          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🎯 ¡Es tu turno!', body: `Te toca en BattleChis (${cur.name}).`, url });
+          if (cur && !cur.isBot) notifySeat(seatOf(cur.faction), { title: '🎯 ¡Es tu turno!', body: `Te toca en BattleChis (${cur.name}).` });
         }
         // Attacked → super-defense prompt.
         if (snap.defenseState && !notifyRef.current.def) {
           notifyRef.current.def = true;
-          const uid = seatUid(snap.defenseState.defenderFaction);
-          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🛡️ ¡Te atacan!', body: 'Decide si usas tu Super Defensa.', url });
+          notifySeat(seatOf(snap.defenseState.defenderFaction), { title: '🛡️ ¡Te atacan!', body: 'Decide si usas tu Super Defensa.' });
         } else if (!snap.defenseState) { notifyRef.current.def = false; }
         // Road-crossing negotiation.
         if (snap.negotiationState && !notifyRef.current.neg) {
           notifyRef.current.neg = true;
-          const uid = seatUid(snap.negotiationState.defenderFaction);
-          if (uid && uid !== mp.userId) mp.notify({ userId: uid, title: '🚧 Cruce en tu territorio', body: '¿Dejas pasar o bloqueas?', url });
+          notifySeat(seatOf(snap.negotiationState.defenderFaction), { title: '🚧 Cruce en tu territorio', body: '¿Dejas pasar o bloqueas?' });
         } else if (!snap.negotiationState) { notifyRef.current.neg = false; }
       } catch { /* ignore */ }
     }, 250);

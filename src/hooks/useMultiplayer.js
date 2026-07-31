@@ -735,9 +735,23 @@ export function useMultiplayer() {
   }, [pushSupported, ensureAuth]);
 
   // ── Fire a push to a specific user via the edge function (no webhook needed) ──
+  // Send a push. If `accountId` is given, it fans out to ALL that account's
+  // devices (resolved client-side); `userId` targets a single device. Either or
+  // both may be provided.
   const notify = useCallback(async (payload) => {
-    if (!isSupabaseConfigured || (!payload?.userId && !payload?.accountId)) return;
-    try { await supabase.functions.invoke('notify', { body: { notify: payload } }); }
+    if (!isSupabaseConfigured) return;
+    const { accountId: accId, userId: uid, ...rest } = payload || {};
+    let uids = [];
+    if (accId) {
+      try {
+        const { data } = await supabase.rpc('battlechis_push_targets', { p_account: accId });
+        if (Array.isArray(data)) uids = data.map((r) => r.device_uid).filter(Boolean);
+      } catch { /* ignore */ }
+    }
+    if (uid) uids.push(uid);
+    uids = Array.from(new Set(uids));
+    if (!uids.length) return;
+    try { await Promise.all(uids.map((u) => supabase.functions.invoke('notify', { body: { notify: { ...rest, userId: u } } }))); }
     catch { /* best-effort */ }
   }, []);
 
