@@ -92,23 +92,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
 
     // Direct invoke from the game client (no webhook needed):
-    //   { notify: { userId?, accountId?, title, body, url } }
-    // accountId fans out to EVERY device linked to that account (multi-device);
-    // userId stays as a fallback so it still works before this fn is redeployed.
-    if (body?.notify && (body.notify.userId || body.notify.accountId)) {
+    //   { notify: { userId, title, body, url } }
+    // (The client resolves an account's devices via the battlechis_push_targets
+    //  RPC and calls this once per device, so no fan-out is needed here.)
+    if (body?.notify?.userId) {
       const n = body.notify;
-      const uids = new Set<string>();
-      if (n.userId) uids.add(n.userId);
-      if (n.accountId) {
-        const { data: devs, error } = await admin
-          .from('battlechis_account_devices').select('device_uid').eq('account_id', n.accountId);
-        if (error) console.error(`[notify] account_devices lookup error: ${error.message}`);
-        (devs ?? []).forEach((d: any) => { if (d.device_uid) uids.add(d.device_uid); });
-      }
-      console.log(`[notify] direct invoke → ${uids.size} device(s) title="${n.title}"`);
-      const results = await Promise.all([...uids].map((u) =>
-        sendTo(u, { title: n.title || 'BattleChis', body: n.body || '', url: n.url || APP_URL, tag: n.tag || 'battlechis' })));
-      return json({ results });
+      console.log(`[notify] direct invoke → user=${n.userId} title="${n.title}"`);
+      const result = await sendTo(n.userId, { title: n.title || 'BattleChis', body: n.body || '', url: n.url || APP_URL, tag: n.tag || 'battlechis' });
+      return json(result);
     }
 
     // Otherwise: Database Webhook payload (record / old_record).

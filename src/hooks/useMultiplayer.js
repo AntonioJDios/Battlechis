@@ -697,20 +697,30 @@ export function useMultiplayer() {
     catch { /* best-effort */ }
   }, []);
 
-  // "Nudge" a player whose turn it is (poke them to come play). Reaches all their
-  // devices via accountId, with the seat's userId as a fallback.
+  // "Nudge" a player whose turn it is (poke them to come play). Reaches EVERY
+  // device linked to their account (resolved via RPC), with the seat's userId as
+  // a fallback — no edge-function redeploy needed.
   const nudge = useCallback(async ({ accountId: acc, userId: uid } = {}) => {
     if (!isSupabaseConfigured || (!acc && !uid)) return { ok: false };
     const nick = profileRef.current?.nickname || 'Un jugador';
+    const payload = {
+      title: '👉 ¡Te tocaaaa!',
+      body: `${nick} te avisa: ¡es tu turno en BattleChis!`,
+      url: window.location.origin,
+      tag: 'battlechis-nudge',
+    };
+    let uids = [];
+    if (acc) {
+      try {
+        const { data } = await supabase.rpc('battlechis_push_targets', { p_account: acc });
+        if (Array.isArray(data)) uids = data.map((r) => r.device_uid).filter(Boolean);
+      } catch { /* RPC not there yet → fall back to the seat uid */ }
+    }
+    if (!uids.length && uid) uids = [uid];
+    if (!uids.length) return { ok: false };
     try {
-      await supabase.functions.invoke('notify', { body: { notify: {
-        accountId: acc || null,
-        userId: uid || null,
-        title: '👉 ¡Te tocaaaa!',
-        body: `${nick} te avisa: ¡es tu turno en BattleChis!`,
-        url: window.location.origin,
-        tag: 'battlechis-nudge',
-      } } });
+      await Promise.all(uids.map((u) =>
+        supabase.functions.invoke('notify', { body: { notify: { ...payload, userId: u } } })));
       return { ok: true };
     } catch (e) { return { ok: false, msg: e.message }; }
   }, []);

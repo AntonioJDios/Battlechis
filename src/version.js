@@ -3,4 +3,4 @@
 // El build genera automáticamente /version.json con este valor (ver vite.config.js);
 // la app lo consulta por red (sin caché) y, si es mayor que el build que tienes,
 // muestra el botón "🔄 Actualizar" en la portada. NO hay que tocar la base de datos.
-export const APP_VERSION = 4;
+export const APP_VERSION = 5;

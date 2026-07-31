@@ -431,6 +431,15 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.battlechis_my_account() to authenticated;
 
+-- Dispositivos (uids) a notificar para una cuenta (para el "toque" / avisos push).
+-- Security definer: el cliente no puede leer account_devices de otras cuentas por RLS.
+create or replace function public.battlechis_push_targets(p_account uuid)
+returns table(device_uid uuid)
+language sql stable security definer set search_path = public as $$
+  select d.device_uid from public.battlechis_account_devices d where d.account_id = p_account;
+$$;
+grant execute on function public.battlechis_push_targets(uuid) to authenticated;
+
 -- Adjunta a la cuenta las partidas en las que YA está este dispositivo, para que
 -- cualquier móvil vinculado las vea. Aditivo: conserva el uid en cada asiento.
 create or replace function public.battlechis_attach_games(p_dev uuid, p_account uuid)
