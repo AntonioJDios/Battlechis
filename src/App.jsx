@@ -221,15 +221,22 @@ export default function App() {
   const [onboarded, setOnboarded] = useState(false); // dismissed the create-profile prompt this session
   const [updateAvailable, setUpdateAvailable] = useState(false); // a newer app version is live
 
-  // Check the DB app version vs this build; prompt an update if it's newer.
+  // Compare the live deploy's /version.json against this build; prompt if newer.
+  // (Static file published by Vercel on each deploy — no DB, no manual step.)
   useEffect(() => {
-    if (!mp.available) return;
     let alive = true;
-    const check = () => mp.fetchAppVersion().then((v) => { if (alive && typeof v === 'number' && v > APP_VERSION) setUpdateAvailable(true); }).catch(() => {});
+    const check = async () => {
+      try {
+        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const { version } = await res.json();
+        if (alive && typeof version === 'number' && version > APP_VERSION) setUpdateAvailable(true);
+      } catch { /* offline / not deployed yet — ignore */ }
+    };
     check();
     const t = setInterval(check, 5 * 60 * 1000); // re-check every 5 min while open
     return () => { alive = false; clearInterval(t); };
-  }, [mp.available, mp.fetchAppVersion]);
+  }, []);
 
   // Force a clean reload to the latest version (clears SW caches first — reliable on iOS).
   const applyUpdate = async () => {

@@ -5,7 +5,7 @@
 //   • Hashed build assets (/assets/*): cache-first — safe because the file name
 //     changes on every build, so a new deploy fetches new URLs.
 // Bump CACHE_VERSION on notable releases to retire old caches.
-const CACHE_VERSION = 'battlechis-v3';
+const CACHE_VERSION = 'battlechis-v4';
 const PRECACHE = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -60,6 +60,11 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return;
 
   const url = new URL(request.url);
+
+  // Never cache the version manifest: the app polls it (no-store) to detect a new
+  // deploy, so it must always hit the network. Let the browser handle it.
+  if (url.pathname === '/version.json') return;
+
   const isHtml = request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html');
 
   if (isHtml) {
