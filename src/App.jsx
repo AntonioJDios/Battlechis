@@ -202,6 +202,16 @@ export default function App() {
   // While the chat is open, everything counts as seen; closed, new messages pile up.
   useEffect(() => { if (showChat) setChatSeen(mp.chatMessages.length); }, [showChat, mp.chatMessages.length]);
   const chatUnread = Math.max(0, mp.chatMessages.length - chatSeen);
+  // "Nudge" the player whose turn it is (poke them via push). Short cooldown so
+  // it can't be spammed.
+  const [nudgeCd, setNudgeCd] = useState(false);
+  const handleNudge = async () => {
+    const activeSeat = seats ? seats.find((s) => s.faction === activeFaction && s.type === 'human') : null;
+    if (nudgeCd || !activeSeat) return;
+    setNudgeCd(true);
+    try { await mp.nudge({ accountId: activeSeat.accountId, userId: activeSeat.userId }); } catch { /* ignore */ }
+    setTimeout(() => setNudgeCd(false), 15000);
+  };
   const [troopsToMove, setTroopsToMove] = useState(1);
   const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
   // Game options chosen by the creator
@@ -1062,11 +1072,21 @@ export default function App() {
         {/* Left / Center Work Area (Board only) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Online: spectator banner when it's not your turn */}
+          {/* Online: spectator banner when it's not your turn (+ nudge button) */}
           {onlineActive && !isMyTurn && (
-            <div className="w-full bg-slate-800/40 border border-slate-600/40 px-3 py-2 rounded text-slate-300 font-mono text-[10px] sm:text-xs flex items-center gap-2 shrink-0 animate-pulse">
-              <span className="text-base">⏳</span>
-              <span>Turno de <strong style={{ color: FACTIONS[activeFaction]?.neon }}>{players[currentTurn]?.name}</strong> — esperando su jugada…</span>
+            <div className="w-full bg-slate-800/40 border border-slate-600/40 px-3 py-2 rounded text-slate-300 font-mono text-[10px] sm:text-xs flex items-center gap-2 shrink-0">
+              <span className="text-base animate-pulse">⏳</span>
+              <span className="animate-pulse">Turno de <strong style={{ color: FACTIONS[activeFaction]?.neon }}>{players[currentTurn]?.name}</strong> — esperando su jugada…</span>
+              {!players[currentTurn]?.isBot && (
+                <button
+                  onClick={handleNudge}
+                  disabled={nudgeCd}
+                  className={`ml-auto shrink-0 font-tactical text-[10px] font-bold px-2.5 py-1 rounded border transition-all ${nudgeCd ? 'border-green-500/40 text-green-400/80 bg-green-950/20 cursor-default' : 'border-amber-400/60 text-amber-300 bg-amber-950/30 hover:bg-amber-500/20'}`}
+                  title="Avisar al jugador de que le toca (le llega una notificación)"
+                >
+                  {nudgeCd ? 'Avisado 👍' : '👉 ¡Te tocaaaa!'}
+                </button>
+              )}
             </div>
           )}
 

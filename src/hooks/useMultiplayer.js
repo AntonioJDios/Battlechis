@@ -692,9 +692,27 @@ export function useMultiplayer() {
 
   // ── Fire a push to a specific user via the edge function (no webhook needed) ──
   const notify = useCallback(async (payload) => {
-    if (!isSupabaseConfigured || !payload?.userId) return;
+    if (!isSupabaseConfigured || (!payload?.userId && !payload?.accountId)) return;
     try { await supabase.functions.invoke('notify', { body: { notify: payload } }); }
     catch { /* best-effort */ }
+  }, []);
+
+  // "Nudge" a player whose turn it is (poke them to come play). Reaches all their
+  // devices via accountId, with the seat's userId as a fallback.
+  const nudge = useCallback(async ({ accountId: acc, userId: uid } = {}) => {
+    if (!isSupabaseConfigured || (!acc && !uid)) return { ok: false };
+    const nick = profileRef.current?.nickname || 'Un jugador';
+    try {
+      await supabase.functions.invoke('notify', { body: { notify: {
+        accountId: acc || null,
+        userId: uid || null,
+        title: '👉 ¡Te tocaaaa!',
+        body: `${nick} te avisa: ¡es tu turno en BattleChis!`,
+        url: window.location.origin,
+        tag: 'battlechis-nudge',
+      } } });
+      return { ok: true };
+    } catch (e) { return { ok: false, msg: e.message }; }
   }, []);
 
   // ── Claim a specific seat in a game (the player picks which commander) ──
@@ -795,6 +813,7 @@ export function useMultiplayer() {
     pushSupported,
     pushEnabled,
     notify,
+    nudge,
     profile,
     fetchAppVersion,
     saveProfile,
