@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const TABLE = 'battlechis_games';
+const CHAT_TABLE = 'battlechis_chat';
 const PUSH_TABLE = 'battlechis_push';
 const PROFILE_TABLE = 'battlechis_profiles';
 const FRIENDS_TABLE = 'battlechis_friends';
@@ -76,6 +77,24 @@ export function useMultiplayer() {
   const onRemoteRef = useRef(null);   // callback(state, meta) for incoming updates
   const pollRef = useRef(null);       // polling interval (realtime fallback)
   const lastUpdatedRef = useRef(null); // last row.updated_at we processed (dedupe)
+
+  // ── In-game chat (own table, independent of turn authority) ──
+  const [chatMessages, setChatMessages] = useState([]);
+  const chatChannelRef = useRef(null);
+  const chatPollRef = useRef(null);
+  const chatIdsRef = useRef(new Set()); // dedupe by message id
+  const mergeChat = useCallback((rows) => {
+    if (!rows || !rows.length) return;
+    setChatMessages((prev) => {
+      const seen = chatIdsRef.current;
+      const added = rows.filter((r) => r && r.id && !seen.has(r.id));
+      if (!added.length) return prev;
+      added.forEach((r) => seen.add(r.id));
+      const next = [...prev, ...added].sort((a, b) =>
+        (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+      return next.slice(-100); // keep the last 100
+    });
+  }, []);
 
   // ── Anonymous auth: one stable uid per device ──
   const ensureAuth = useCallback(async () => {
@@ -446,6 +465,28 @@ export function useMultiplayer() {
   // ── Subscribe to a game: realtime + a polling fallback (every 2.5s) ──
   // Realtime with RLS + anonymous auth can silently fail to deliver; the poll
   // guarantees both the lobby and in-game state stay in sync.
+  // Subscribe to a game's chat: initial load + realtime INSERT + poll fallback.
+  const subscribeChat = useCallback((gameId) => {
+    if (chatChannelRef.current) { supabase.removeChannel(chatChannelRef.current); chatChannelRef.current = null; }
+    if (chatPollRef.current) { clearInterval(chatPollRef.current); chatPollRef.current = null; }
+    chatIdsRef.current = new Set();
+    setChatMessages([]);
+    supabase.from(CHAT_TABLE).select('*').eq('game_id', gameId)
+      .order('created_at', { ascending: true }).limit(100)
+      .then(({ data }) => mergeChat(data || []), () => {});
+    chatChannelRef.current = supabase
+      .channel(`chat:${gameId}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: CHAT_TABLE, filter: `game_id=eq.${gameId}` },
+        (payload) => mergeChat([payload.new]))
+      .subscribe();
+    chatPollRef.current = setInterval(async () => {
+      const { data } = await supabase.from(CHAT_TABLE).select('*').eq('game_id', gameId)
+        .order('created_at', { ascending: false }).limit(30);
+      mergeChat(data || []);
+    }, 3500);
+  }, [mergeChat]);
+
   const subscribe = useCallback((gameId) => {
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -463,7 +504,28 @@ export function useMultiplayer() {
       const { data } = await supabase.from(TABLE).select('*').eq('id', gameId).single();
       applyRow(data);
     }, 2500);
-  }, [applyRow]);
+
+    subscribeChat(gameId);
+  }, [applyRow, subscribeChat]);
+
+  // Send a quick chat message to the current game.
+  const sendChat = useCallback(async (gameId, text) => {
+    const body = (text ?? '').toString().trim();
+    if (!isSupabaseConfigured || !gameId || !body) return { ok: false };
+    try {
+      const uid = await ensureAuth();
+      const { error } = await supabase.from(CHAT_TABLE).insert({
+        game_id: gameId,
+        sender_uid: uid,
+        sender_account: accountIdRef.current || null,
+        nickname: profileRef.current?.nickname || 'Jugador',
+        avatar: profileRef.current?.avatar || DEFAULT_AVATAR,
+        body: body.slice(0, 300),
+      });
+      if (error) return { ok: false, msg: error.message };
+      return { ok: true };
+    } catch (e) { return { ok: false, msg: e.message }; }
+  }, [ensureAuth]);
 
   // ── Create a new game (host) ──
   // seats: array like [{faction, type:'human'|'bot', name}], initialState: game state object
@@ -700,6 +762,10 @@ export function useMultiplayer() {
   const leaveGame = useCallback(() => {
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (chatChannelRef.current) { supabase.removeChannel(chatChannelRef.current); chatChannelRef.current = null; }
+    if (chatPollRef.current) { clearInterval(chatPollRef.current); chatPollRef.current = null; }
+    chatIdsRef.current = new Set();
+    setChatMessages([]);
     lastUpdatedRef.current = null;
     setGame(null);
   }, []);
@@ -707,6 +773,8 @@ export function useMultiplayer() {
   useEffect(() => () => {
     if (channelRef.current) supabase?.removeChannel(channelRef.current);
     if (pollRef.current) clearInterval(pollRef.current);
+    if (chatChannelRef.current) supabase?.removeChannel(chatChannelRef.current);
+    if (chatPollRef.current) clearInterval(chatPollRef.current);
   }, []);
 
   return {
@@ -752,5 +820,7 @@ export function useMultiplayer() {
     pushState,
     setOnRemoteState,
     leaveGame,
+    chatMessages,
+    sendChat,
   };
 }

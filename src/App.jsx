@@ -21,6 +21,7 @@ import { SoundManager } from './components/SoundManager';
 import { FACTIONS } from './utils/boardGraph';
 import { APP_VERSION } from './version';
 import { Shield, Settings, Play, ShieldAlert, RotateCcw, Volume2, VolumeX, ListCollapse, Wifi, X, Home } from 'lucide-react';
+import ChatPanel from './components/ChatPanel';
 
 // Canonical JSON (sorted keys) so state coming back from Postgres JSONB — which
 // does NOT preserve key order — compares equal to our locally-built snapshot.
@@ -196,6 +197,11 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showRoster, setShowRoster] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatSeen, setChatSeen] = useState(0);
+  // While the chat is open, everything counts as seen; closed, new messages pile up.
+  useEffect(() => { if (showChat) setChatSeen(mp.chatMessages.length); }, [showChat, mp.chatMessages.length]);
+  const chatUnread = Math.max(0, mp.chatMessages.length - chatSeen);
   const [troopsToMove, setTroopsToMove] = useState(1);
   const [wizardIdx, setWizardIdx] = useState(0); // setup wizard: current seat step (=== count → review)
   // Game options chosen by the creator
@@ -978,12 +984,28 @@ export default function App() {
 
           {/* Log toggle button */}
           <button
-            onClick={() => setShowLog(v => !v)}
+            onClick={() => { setShowLog(v => !v); setShowChat(false); }}
             className={`p-2 border rounded transition-all text-xs font-tactical font-bold ${showLog ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20' : 'border-slate-800 text-slate-500 hover:text-white hover:border-slate-700'}`}
             title="Log táctico"
           >
             📋
           </button>
+
+          {/* Chat toggle (online only) */}
+          {onlineActive && (
+            <button
+              onClick={() => { setShowChat(v => !v); setShowLog(false); }}
+              className={`relative p-2 border rounded transition-all text-xs font-tactical font-bold ${showChat ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20' : 'border-slate-800 text-slate-500 hover:text-white hover:border-slate-700'}`}
+              title="Chat"
+            >
+              💬
+              {chatUnread > 0 && !showChat && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center leading-none">
+                  {chatUnread > 9 ? '9+' : chatUnread}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Push notifications toggle */}
           {mp.available && mp.pushSupported && (
@@ -1262,6 +1284,17 @@ export default function App() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Floating Chat Panel (online) */}
+      {showChat && onlineActive && (
+        <ChatPanel
+          messages={mp.chatMessages}
+          onSend={(t) => mp.sendChat(mp.game?.id, t)}
+          onClose={() => setShowChat(false)}
+          myUid={mp.userId}
+          myAccountId={mp.accountId}
+        />
       )}
 
       {/* Floating Log Panel */}

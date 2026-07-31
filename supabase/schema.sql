@@ -599,3 +599,46 @@ drop policy if exists battlechis_games_delete on public.battlechis_games;
 create policy battlechis_games_delete on public.battlechis_games for delete to authenticated
   using (auth.uid() = any(member_ids)
          or public.battlechis_my_account_id() = any(member_accounts));
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  CHAT DE PARTIDA (mensajes rápidos + emojis)
+--  Tabla propia (NO va en el estado del juego) para que CUALQUIER jugador escriba
+--  en cualquier momento, no solo el del turno. Se ve al instante por Realtime.
+--  on delete cascade: al borrar la partida se borra su chat.
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.battlechis_chat (
+  id             uuid primary key default gen_random_uuid(),
+  game_id        uuid not null references public.battlechis_games(id) on delete cascade,
+  sender_uid     uuid not null default auth.uid(),
+  sender_account uuid,
+  nickname       text,
+  avatar         text,
+  body           text not null,
+  created_at     timestamptz not null default now(),
+  constraint battlechis_chat_body_len check (char_length(body) <= 300)
+);
+create index if not exists battlechis_chat_game_idx on public.battlechis_chat (game_id, created_at);
+alter table public.battlechis_chat enable row level security;
+
+-- Ves / escribes en el chat de una partida de la que eres miembro (por uid o por
+-- cuenta), o que está en espera (para charlar en la sala). El emisor eres tú.
+drop policy if exists battlechis_chat_select on public.battlechis_chat;
+create policy battlechis_chat_select on public.battlechis_chat for select to authenticated
+  using (exists (select 1 from public.battlechis_games g where g.id = game_id
+                 and (auth.uid() = any(g.member_ids)
+                      or public.battlechis_my_account_id() = any(g.member_accounts)
+                      or g.status = 'waiting')));
+drop policy if exists battlechis_chat_insert on public.battlechis_chat;
+create policy battlechis_chat_insert on public.battlechis_chat for insert to authenticated
+  with check (sender_uid = auth.uid()
+              and exists (select 1 from public.battlechis_games g where g.id = game_id
+                          and (auth.uid() = any(g.member_ids)
+                               or public.battlechis_my_account_id() = any(g.member_accounts)
+                               or g.status = 'waiting')));
+
+do $$
+begin
+  alter publication supabase_realtime add table public.battlechis_chat;
+exception when duplicate_object then null;
+end $$;
