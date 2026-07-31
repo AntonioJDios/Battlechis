@@ -1225,8 +1225,9 @@ export default function App() {
               />
             </div>
 
-            {/* Alliance controls — only during human turn */}
-            {gameStarted && phase !== 'GAME_OVER' && !players[currentTurn]?.isBot && (
+            {/* Alliance controls — only on YOUR human turn (so "you" is always the
+                current player: no self-ally, and every opponent shows). */}
+            {gameStarted && phase !== 'GAME_OVER' && isMyTurn && !players[currentTurn]?.isBot && (
               <div style={{ padding: '0 12px 12px' }}>
                 <div className="font-tactical text-[10px] text-gray-500 font-bold tracking-widest uppercase mb-2">DIPLOMACIA</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
