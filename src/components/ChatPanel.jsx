@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { MessageCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { MessageCircle, Send } from 'lucide-react';
 
 // Fixed set of quick messages (no typing → easy for kids, no inappropriate text).
 const PHRASES = [
@@ -18,6 +18,13 @@ const EMOJIS = ['😂', '😱', '🔥', '💀', '😈', '👑', '🎲', '🤝', 
 
 export default function ChatPanel({ messages, onSend, onClose, myUid, myAccountId }) {
   const listRef = useRef(null);
+  const [text, setText] = useState('');
+  const submitText = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend(t);
+    setText('');
+  };
   // Keep scrolled to the newest message.
   useEffect(() => {
     const el = listRef.current;
@@ -31,7 +38,7 @@ export default function ChatPanel({ messages, onSend, onClose, myUid, myAccountI
   return (
     <div
       className="fixed z-[520] tactical-panel bg-[#0d101a]/95 border-slate-700 rounded-md shadow-[0_0_30px_rgba(0,0,0,0.8)] animate-fade-in"
-      style={{ bottom: '12px', left: '50%', transform: 'translateX(-50%)', width: 'min(360px, calc(100vw - 24px))', height: 'min(440px, calc(100dvh - 90px))', display: 'flex', flexDirection: 'column' }}
+      style={{ bottom: '12px', left: 0, right: 0, marginInline: 'auto', width: 'min(360px, calc(100vw - 24px))', height: 'min(460px, calc(100dvh - 90px))', display: 'flex', flexDirection: 'column' }}
     >
       <div className="panel-header bg-[#151a30] flex items-center justify-between">
         <span className="flex items-center gap-1.5"><MessageCircle className="w-3.5 h-3.5" /> CHAT</span>
@@ -96,6 +103,27 @@ export default function ChatPanel({ messages, onSend, onClose, myUid, myAccountI
               {e}
             </button>
           ))}
+        </div>
+
+        {/* Free text */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitText(); } }}
+            maxLength={300}
+            placeholder="Escribe un mensaje…"
+            className="flex-1 font-mono text-[12px] text-white bg-slate-950 border border-slate-700 rounded px-2 py-1.5 outline-none focus:border-cyan-500/60"
+          />
+          <button
+            onClick={submitText}
+            disabled={!text.trim()}
+            className="flex items-center justify-center rounded border border-cyan-500/50 bg-cyan-950/30 text-cyan-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ width: 36, cursor: 'pointer' }}
+            title="Enviar"
+          >
+            <Send className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
