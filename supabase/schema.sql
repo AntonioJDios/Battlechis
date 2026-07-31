@@ -709,3 +709,60 @@ begin
   end if;
 end;
 $$;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  AMISTADES E INVITACIONES POR CUENTA (multi-dispositivo)
+--  Antes iban por uid del móvil → al vincular otro móvil se "perdían". Ahora usan
+--  account_id, así te siguen a cualquier dispositivo de tu cuenta.
+--  Migración idempotente: convierte uid→account_id (con dedupe) y re-declara RLS.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Amistades: primero quita duplicados que colisionarían tras mapear, luego convierte.
+delete from public.battlechis_friends f
+ where f.ctid <> (
+   select min(f2.ctid) from public.battlechis_friends f2
+   where coalesce((select account_id from public.battlechis_profiles where user_id = f2.user_id), f2.user_id)
+       = coalesce((select account_id from public.battlechis_profiles where user_id = f.user_id), f.user_id)
+     and coalesce((select account_id from public.battlechis_profiles where user_id = f2.friend_id), f2.friend_id)
+       = coalesce((select account_id from public.battlechis_profiles where user_id = f.friend_id), f.friend_id));
+update public.battlechis_friends f set user_id   = p.account_id
+  from public.battlechis_profiles p where p.user_id = f.user_id;
+update public.battlechis_friends f set friend_id = p.account_id
+  from public.battlechis_profiles p where p.user_id = f.friend_id;
+
+drop policy if exists battlechis_friends_select on public.battlechis_friends;
+create policy battlechis_friends_select on public.battlechis_friends for select to authenticated
+  using (user_id = public.battlechis_my_account_id() or friend_id = public.battlechis_my_account_id());
+drop policy if exists battlechis_friends_insert on public.battlechis_friends;
+create policy battlechis_friends_insert on public.battlechis_friends for insert to authenticated
+  with check (user_id = public.battlechis_my_account_id());
+drop policy if exists battlechis_friends_update on public.battlechis_friends;
+create policy battlechis_friends_update on public.battlechis_friends for update to authenticated
+  using (friend_id = public.battlechis_my_account_id())
+  with check (friend_id = public.battlechis_my_account_id());
+drop policy if exists battlechis_friends_delete on public.battlechis_friends;
+create policy battlechis_friends_delete on public.battlechis_friends for delete to authenticated
+  using (user_id = public.battlechis_my_account_id() or friend_id = public.battlechis_my_account_id());
+
+-- Invitaciones: mismo tratamiento (dedupe por (game_id, to_user) tras mapear).
+delete from public.battlechis_game_invites i
+ where i.ctid <> (
+   select min(i2.ctid) from public.battlechis_game_invites i2
+   where i2.game_id = i.game_id
+     and coalesce((select account_id from public.battlechis_profiles where user_id = i2.to_user), i2.to_user)
+       = coalesce((select account_id from public.battlechis_profiles where user_id = i.to_user), i.to_user));
+update public.battlechis_game_invites i set from_user = p.account_id
+  from public.battlechis_profiles p where p.user_id = i.from_user;
+update public.battlechis_game_invites i set to_user   = p.account_id
+  from public.battlechis_profiles p where p.user_id = i.to_user;
+
+drop policy if exists battlechis_game_invites_select on public.battlechis_game_invites;
+create policy battlechis_game_invites_select on public.battlechis_game_invites for select to authenticated
+  using (from_user = public.battlechis_my_account_id() or to_user = public.battlechis_my_account_id());
+drop policy if exists battlechis_game_invites_insert on public.battlechis_game_invites;
+create policy battlechis_game_invites_insert on public.battlechis_game_invites for insert to authenticated
+  with check (from_user = public.battlechis_my_account_id());
+drop policy if exists battlechis_game_invites_delete on public.battlechis_game_invites;
+create policy battlechis_game_invites_delete on public.battlechis_game_invites for delete to authenticated
+  using (from_user = public.battlechis_my_account_id() or to_user = public.battlechis_my_account_id());

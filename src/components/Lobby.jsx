@@ -361,7 +361,8 @@ export default function Lobby({ mp, seatsConfig, initialJoinCode = '', initialVi
                   ) : inviteResults.length === 0 ? (
                     <p className="font-mono text-[10px] text-gray-500 py-1">Nadie con ese nombre.</p>
                   ) : inviteResults.map((u) => {
-                    const seated = seats.some((s) => s.userId === u.user_id);
+                    // u.user_id now carries the account_id; seats store accountId.
+                    const seated = seats.some((s) => s.accountId === u.user_id);
                     const done = invited[u.user_id];
                     return (
                       <div key={u.user_id} className="flex items-center gap-2 bg-[#0d101a] border border-slate-900 rounded px-2 py-1.5">

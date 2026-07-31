@@ -645,7 +645,7 @@ export default function App() {
           {showFriends && (
             <FriendsModal
               profile={mp.profile}
-              myUserId={mp.userId}
+              myUserId={mp.accountId}
               searchProfiles={mp.searchProfiles}
               sendFriendRequest={mp.sendFriendRequest}
               listFriendRequests={mp.listFriendRequests}

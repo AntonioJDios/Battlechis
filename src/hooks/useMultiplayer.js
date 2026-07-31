@@ -288,48 +288,67 @@ export function useMultiplayer() {
 
   // ── Friends: search by unique name, request + accept (all in-app) ──
 
+  // Send a push to EVERY device of an account (friend request / game invite…).
+  // NOTE: friends, invites and ranking are keyed by account_id now (not the
+  // device uid), so they follow you to any phone you log into. In the objects
+  // returned to the UI the `user_id` field carries the account_id (kept for the
+  // components' existing `.user_id` keys).
+  const notifyAccount = useCallback(async (accId, payload) => {
+    if (!isSupabaseConfigured || !accId) return;
+    try {
+      const { data } = await supabase.rpc('battlechis_push_targets', { p_account: accId });
+      const uids = Array.isArray(data) ? data.map((r) => r.device_uid).filter(Boolean) : [];
+      await Promise.all(uids.map((u) => supabase.functions.invoke('notify', { body: { notify: { ...payload, userId: u } } })));
+    } catch { /* best-effort */ }
+  }, []);
+
   // Is a nickname free (or already mine)?
   const checkNickname = useCallback(async (name) => {
     const n = (name || '').trim().replace(/[%_]/g, '');
     if (n.length < 2) return { ok: false };
     if (!isSupabaseConfigured) return { ok: true };
     try {
-      const uid = await ensureAuth();
-      const { data } = await supabase.from(PROFILE_TABLE).select('user_id').ilike('nickname', n).maybeSingle();
-      return { ok: !data || data.user_id === uid };
+      await ensureAuth();
+      const { data } = await supabase.from(PROFILE_TABLE).select('account_id').ilike('nickname', n).maybeSingle();
+      return { ok: !data || data.account_id === accountIdRef.current };
     } catch { return { ok: true }; }
   }, [ensureAuth]);
 
-  // Search profiles by (unique) name.
+  // Search profiles (accounts) by (unique) name.
   const searchProfiles = useCallback(async (query) => {
     const q = (query || '').trim().replace(/[%_]/g, '');
     if (!isSupabaseConfigured || q.length < 2) return [];
-    const uid = await ensureAuth();
+    await ensureAuth();
+    const acc = accountIdRef.current;
     const { data } = await supabase.from(PROFILE_TABLE)
-      .select('user_id, nickname, avatar, games_won, games_played')
+      .select('account_id, nickname, avatar, games_won, games_played')
       .ilike('nickname', `%${q}%`).not('nickname', 'is', null).limit(15);
-    return (data || []).filter((p) => p.user_id !== uid);
+    return (data || [])
+      .filter((p) => p.account_id && p.account_id !== acc)
+      .map((p) => ({ ...p, user_id: p.account_id }));
   }, [ensureAuth]);
 
-  // Send a friend request (or auto-accept if they already requested me).
-  const sendFriendRequest = useCallback(async (toUserId) => {
-    if (!isSupabaseConfigured || !toUserId) return { ok: false, msg: 'Online no configurado.' };
+  // Send a friend request (or auto-accept if they already requested me). By account.
+  const sendFriendRequest = useCallback(async (toAccount) => {
+    if (!isSupabaseConfigured || !toAccount) return { ok: false, msg: 'Online no configurado.' };
     try {
-      const uid = await ensureAuth();
-      if (toUserId === uid) return { ok: false, msg: 'Eres tú 🙂' };
+      await ensureAuth();
+      const acc = accountIdRef.current;
+      if (!acc) return { ok: false, msg: 'Crea tu perfil (con nombre) primero.' };
+      if (toAccount === acc) return { ok: false, msg: 'Eres tú 🙂' };
       const { data: incoming } = await supabase.from(FRIENDS_TABLE)
-        .select('user_id').eq('user_id', toUserId).eq('friend_id', uid).maybeSingle();
+        .select('user_id').eq('user_id', toAccount).eq('friend_id', acc).maybeSingle();
       if (incoming) {
-        await supabase.from(FRIENDS_TABLE).update({ status: 'accepted' }).eq('user_id', toUserId).eq('friend_id', uid);
+        await supabase.from(FRIENDS_TABLE).update({ status: 'accepted' }).eq('user_id', toAccount).eq('friend_id', acc);
         return { ok: true, accepted: true };
       }
-      const { error } = await supabase.from(FRIENDS_TABLE).insert({ user_id: uid, friend_id: toUserId, status: 'pending' });
+      const { error } = await supabase.from(FRIENDS_TABLE).insert({ user_id: acc, friend_id: toAccount, status: 'pending' });
       if (error && error.code !== '23505') return { ok: false, msg: error.message };
       const nick = profileRef.current?.nickname || 'Alguien';
-      supabase.functions.invoke('notify', { body: { notify: { userId: toUserId, title: '👋 Solicitud de amistad', body: `${nick} quiere ser tu amigo en BattleChis.`, url: window.location.origin } } }).then(() => {}, () => {});
+      notifyAccount(toAccount, { title: '👋 Solicitud de amistad', body: `${nick} quiere ser tu amigo en BattleChis.`, url: window.location.origin });
       return { ok: true };
     } catch (e) { return { ok: false, msg: e.message }; }
-  }, [ensureAuth]);
+  }, [ensureAuth, notifyAccount]);
 
   // Kept for the legacy ?friend= link: resolve the code, then send a request.
   const addFriendByCode = useCallback(async (code) => {
@@ -338,88 +357,98 @@ export function useMultiplayer() {
     if (!isSupabaseConfigured) return { ok: false, msg: 'Online no configurado.' };
     try {
       const { data: prof, error: e1 } = await supabase.from(PROFILE_TABLE)
-        .select('user_id, nickname, avatar').eq('friend_code', c).maybeSingle();
+        .select('account_id, nickname, avatar').eq('friend_code', c).maybeSingle();
       if (e1) return { ok: false, msg: e1.message };
       if (!prof) return { ok: false, msg: 'No existe ese código.' };
-      const r = await sendFriendRequest(prof.user_id);
-      return r.ok ? { ok: true, friend: prof, accepted: r.accepted } : r;
+      const r = await sendFriendRequest(prof.account_id);
+      return r.ok ? { ok: true, friend: { ...prof, user_id: prof.account_id }, accepted: r.accepted } : r;
     } catch (e) { return { ok: false, msg: e.message }; }
   }, [sendFriendRequest]);
 
-  // Incoming friend requests (people who asked to be my friend).
+  // Incoming friend requests (accounts that asked to be my friend).
   const listFriendRequests = useCallback(async () => {
     if (!isSupabaseConfigured) return [];
-    const uid = await ensureAuth();
+    await ensureAuth();
+    const acc = accountIdRef.current;
+    if (!acc) return [];
     const { data: rows } = await supabase.from(FRIENDS_TABLE)
-      .select('user_id').eq('friend_id', uid).eq('status', 'pending');
+      .select('user_id').eq('friend_id', acc).eq('status', 'pending');
     const ids = (rows || []).map((r) => r.user_id);
     if (!ids.length) return [];
-    const { data: profs } = await supabase.from(PROFILE_TABLE).select('user_id, nickname, avatar').in('user_id', ids);
-    return profs || [];
+    const { data: profs } = await supabase.from(PROFILE_TABLE).select('account_id, nickname, avatar').in('account_id', ids);
+    return (profs || []).map((p) => ({ ...p, user_id: p.account_id }));
   }, [ensureAuth]);
 
-  const acceptFriendRequest = useCallback(async (fromUserId) => {
+  const acceptFriendRequest = useCallback(async (fromAccount) => {
     if (!isSupabaseConfigured) return;
-    const uid = await ensureAuth();
-    await supabase.from(FRIENDS_TABLE).update({ status: 'accepted' }).eq('user_id', fromUserId).eq('friend_id', uid);
+    await ensureAuth();
+    const acc = accountIdRef.current;
+    await supabase.from(FRIENDS_TABLE).update({ status: 'accepted' }).eq('user_id', fromAccount).eq('friend_id', acc);
   }, [ensureAuth]);
 
-  const rejectFriendRequest = useCallback(async (fromUserId) => {
+  const rejectFriendRequest = useCallback(async (fromAccount) => {
     if (!isSupabaseConfigured) return;
-    const uid = await ensureAuth();
-    await supabase.from(FRIENDS_TABLE).delete().eq('user_id', fromUserId).eq('friend_id', uid);
+    await ensureAuth();
+    const acc = accountIdRef.current;
+    await supabase.from(FRIENDS_TABLE).delete().eq('user_id', fromAccount).eq('friend_id', acc);
   }, [ensureAuth]);
 
-  // My accepted friends (both directions), joined to their profiles.
+  // My accepted friends (both directions), joined to their profiles. By account.
   const listFriends = useCallback(async () => {
     if (!isSupabaseConfigured) return [];
-    const uid = await ensureAuth();
+    await ensureAuth();
+    const acc = accountIdRef.current;
+    if (!acc) return [];
     const { data: rows, error: e } = await supabase.from(FRIENDS_TABLE)
-      .select('user_id, friend_id').eq('status', 'accepted').or(`user_id.eq.${uid},friend_id.eq.${uid}`);
+      .select('user_id, friend_id').eq('status', 'accepted').or(`user_id.eq.${acc},friend_id.eq.${acc}`);
     if (e) throw e;
-    const ids = Array.from(new Set((rows || []).map((r) => (r.user_id === uid ? r.friend_id : r.user_id))));
+    const ids = Array.from(new Set((rows || []).map((r) => (r.user_id === acc ? r.friend_id : r.user_id))));
     if (ids.length === 0) return [];
     const { data: profs, error: e2 } = await supabase.from(PROFILE_TABLE)
-      .select('user_id, nickname, avatar, games_played, games_won').in('user_id', ids);
+      .select('account_id, nickname, avatar, games_played, games_won').in('account_id', ids);
     if (e2) throw e2;
-    return profs || [];
+    return (profs || []).map((p) => ({ ...p, user_id: p.account_id }));
   }, [ensureAuth]);
 
-  const removeFriend = useCallback(async (friendId) => {
-    if (!isSupabaseConfigured || !friendId) return { ok: false };
+  const removeFriend = useCallback(async (friendAccount) => {
+    if (!isSupabaseConfigured || !friendAccount) return { ok: false };
     try {
-      const uid = await ensureAuth();
+      await ensureAuth();
+      const acc = accountIdRef.current;
       // Two simple deletes cover both directions of the (directed) friendship.
-      const a = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', uid).eq('friend_id', friendId);
-      const b = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', friendId).eq('friend_id', uid);
+      const a = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', acc).eq('friend_id', friendAccount);
+      const b = await supabase.from(FRIENDS_TABLE).delete().eq('user_id', friendAccount).eq('friend_id', acc);
       if (a.error || b.error) return { ok: false, msg: (a.error || b.error).message };
       return { ok: true };
     } catch (e) { return { ok: false, msg: e.message }; }
   }, [ensureAuth]);
 
-  // ── In-app game invitations ──
-  const inviteToGame = useCallback(async (toUserId, gameId, code) => {
-    if (!isSupabaseConfigured || !toUserId) return { ok: false };
+  // ── In-app game invitations (by account) ──
+  const inviteToGame = useCallback(async (toAccount, gameId, code) => {
+    if (!isSupabaseConfigured || !toAccount) return { ok: false };
     try {
-      const uid = await ensureAuth();
+      await ensureAuth();
+      const acc = accountIdRef.current;
       const { error } = await supabase.from(GAME_INVITES_TABLE)
-        .upsert({ game_id: gameId, code, from_user: uid, to_user: toUserId }, { onConflict: 'game_id,to_user' });
+        .upsert({ game_id: gameId, code, from_user: acc, to_user: toAccount }, { onConflict: 'game_id,to_user' });
       if (error) return { ok: false, msg: error.message };
       const nick = profileRef.current?.nickname || 'Un amigo';
-      supabase.functions.invoke('notify', { body: { notify: { userId: toUserId, title: '🎮 ¡Te invitan a una partida!', body: `${nick} te ha invitado. Ábrela en "Mis partidas".`, url: window.location.origin } } }).then(() => {}, () => {});
+      notifyAccount(toAccount, { title: '🎮 ¡Te invitan a una partida!', body: `${nick} te ha invitado. Ábrela en "Mis partidas".`, url: window.location.origin });
       return { ok: true };
     } catch (e) { return { ok: false, msg: e.message }; }
-  }, [ensureAuth]);
+  }, [ensureAuth, notifyAccount]);
 
   const listGameInvites = useCallback(async () => {
     if (!isSupabaseConfigured) return [];
-    const uid = await ensureAuth();
+    await ensureAuth();
+    const acc = accountIdRef.current;
+    if (!acc) return [];
     const { data: inv } = await supabase.from(GAME_INVITES_TABLE)
-      .select('id, game_id, code, from_user, created_at').eq('to_user', uid).order('created_at', { ascending: false });
+      .select('id, game_id, code, from_user, created_at').eq('to_user', acc).order('created_at', { ascending: false });
     if (!inv || !inv.length) return [];
     const fromIds = Array.from(new Set(inv.map((i) => i.from_user)));
-    const { data: profs } = await supabase.from(PROFILE_TABLE).select('user_id, nickname, avatar').in('user_id', fromIds);
-    const pmap = Object.fromEntries((profs || []).map((p) => [p.user_id, p]));
+    const { data: profs } = await supabase.from(PROFILE_TABLE).select('account_id, nickname, avatar').in('account_id', fromIds);
+    const pmap = Object.fromEntries((profs || []).map((p) => [p.account_id, { ...p, user_id: p.account_id }]));
     return inv.map((i) => ({ ...i, from: pmap[i.from_user] || null }));
   }, [ensureAuth]);
 
@@ -431,16 +460,18 @@ export function useMultiplayer() {
   // ── Ranking: your friend circle (you + friends), most wins first ──
   const fetchRanking = useCallback(async () => {
     if (!isSupabaseConfigured) return [];
-    const uid = await ensureAuth();
+    await ensureAuth();
+    const acc = accountIdRef.current;
     const friends = await listFriends();
-    const ids = Array.from(new Set([uid, ...friends.map((f) => f.user_id)]));
+    const ids = Array.from(new Set([acc, ...friends.map((f) => f.account_id)].filter(Boolean)));
+    if (!ids.length) return [];
     const { data, error: e } = await supabase.from(PROFILE_TABLE)
-      .select('user_id, nickname, avatar, games_played, games_won')
-      .in('user_id', ids)
+      .select('account_id, nickname, avatar, games_played, games_won')
+      .in('account_id', ids)
       .order('games_won', { ascending: false })
       .order('games_played', { ascending: true });
     if (e) throw e;
-    return data || [];
+    return (data || []).map((p) => ({ ...p, user_id: p.account_id }));
   }, [ensureAuth, listFriends]);
 
   // Make sure there's a free human seat for an invited friend: if none, turn a
