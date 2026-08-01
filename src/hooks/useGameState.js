@@ -978,6 +978,8 @@ export function useGameState(online = null) {
       // target (then fall through to move/stack troops onto it).
       if (state.occupyingFaction === currentPlayer.faction
           && !(selectedNode && selectedNode !== nodeId && highlightedNodes.includes(nodeId))) {
+        // Tapping your already-selected platoon again cancels the selection.
+        if (selectedNode === nodeId) { setSelectedNode(null); setHighlightedNodes([]); SoundManager.playClick(); return; }
         const isBase = node.type === 'hq' || node.type === 'neutral' || node.type === 'center';
         if (isBase && state.troops <= 1) {
           addLog("ERROR: Las bases deben mantener al menos 1 tropa de guarnición.", "error");
@@ -1015,14 +1017,19 @@ export function useGameState(online = null) {
 
         const destState = boardState[nodeId];
 
-        // Block attack on allied faction (only if the destination itself is the ally)
+        // Attacking an ally? Instead of silently doing nothing, ask whether to
+        // break the pact and attack. If they cancel, keep the selection + troops.
         if (destState.occupyingFaction !== null && destState.occupyingFaction !== currentPlayer.faction
             && areAllied(currentPlayer.faction, destState.occupyingFaction)) {
-          const allyName = players.find(p => p.faction === destState.occupyingFaction)?.name ?? 'aliado';
-          addLog(`🤝 ALIANZA ACTIVA: No puedes atacar a ${allyName}. Rompe la alianza primero.`, 'error');
-          setSelectedNode(null);
-          setHighlightedNodes([]);
-          return;
+          const allyName = players.find(p => p.faction === destState.occupyingFaction)?.name ?? 'tu aliado';
+          const ok = typeof window !== 'undefined'
+            && window.confirm(`🤝 Estás ALIADO con ${allyName}.\n\n¿Romper la alianza y atacarle ahora?`);
+          if (!ok) {
+            addLog(`🤝 Sigues aliado con ${allyName}. Ataque cancelado.`, 'info');
+            return; // keep the selection so the chosen troops aren't lost
+          }
+          breakAlliance(currentPlayer.faction, destState.occupyingFaction);
+          // fall through → resolve the attack below
         }
 
         // NÚCLEO requires 3 satellite bases (HQ + neutral, not center itself)
@@ -1047,13 +1054,23 @@ export function useGameState(online = null) {
 
         setSelectedNode(null);
         setHighlightedNodes([]);
+      } else if (selectedNode) {
+        // A platoon is selected but this cell isn't a reachable target: explain
+        // why instead of silently doing nothing, and KEEP the selection so the
+        // chosen troop count isn't lost.
+        const dn = graph[nodeId];
+        if (dn?.type === 'center') {
+          addLog(`⛔ Para atacar el NÚCLEO necesitas 3 bases satélite y caer EXACTAMENTE a ${diceRoll} de distancia.`, 'error');
+        } else {
+          addLog(`No puedes llegar a ${dn?.name || 'esa casilla'} con un ${diceRoll}: hay que caer EXACTAMENTE a esa distancia. Toca una casilla resaltada (o tu pelotón para cancelar).`, 'error');
+        }
       } else {
-        // Deselect or click elsewhere
+        // Nothing selected → clear.
         setSelectedNode(null);
         setHighlightedNodes([]);
       }
     }
-  }, [phase, currentTurn, players, boardState, diceRoll, selectedNode, highlightedNodes, graph, reinforceNode, addLog, recruitmentTroops, areAllied, findCrossingConflict, initNegotiation, resolveMoveTo, initConquest]);
+  }, [phase, currentTurn, players, boardState, diceRoll, selectedNode, highlightedNodes, graph, reinforceNode, addLog, recruitmentTroops, areAllied, breakAlliance, findCrossingConflict, initNegotiation, resolveMoveTo, initConquest]);
 
   // --- SURPRISE CELL: draw a card. Troops → apply delta; 💣 bomb → pick a base to
   //     wipe; 👑 nucleo → instant victory. Then continue the turn. ---
