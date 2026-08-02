@@ -527,6 +527,15 @@ export default function Board({
                     style={{ animationDuration: '1.5s', pointerEvents: 'none' }}
                   />
                 )}
+
+                {/* Mine indicator (💣 + remaining charges) */}
+                {state.mine && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    <circle r="11" fill="none" stroke="#fb923c" strokeWidth="1.5" strokeDasharray="2,2" />
+                    <text y="-13" textAnchor="middle" fontSize="13">💣</text>
+                    <text y="-9" x="10" textAnchor="middle" fill="#fb923c" fontSize="8" fontWeight="bold" fontFamily="var(--font-stats)">{state.mine.charges}</text>
+                  </g>
+                )}
               </g>
             );
           })}

@@ -170,6 +170,31 @@ Si atacas una **base enemiga que tiene escudos**, el combate se resuelve en **do
 
 ---
 
+## 💣 Minas
+
+Puedes sembrar **minas** en las casillas de **camino** (no en bases) para castigar a quien las cruce.
+
+**Colocar:** cuando tu pelotón **cae en una casilla de camino libre**, aparece **"💣 Minar (−3 soldados)"**. Gastas **3 soldados** y dejas una mina con **3 cargas** (1 por soldado). El resto de tropas se quedan; si gastas justo 3 y quedan 0, la casilla queda **libre pero minada** (campo sin guarnición).
+
+**Efecto al cruzarla** — solo daña a **enemigos** (¡incluidos tus aliados!); el **dueño pasa gratis**. Un pelotón que **cruza** la mina en su movimiento pierde un % de tropas según **lo cerca que ACABE** de ella (más cerca, más daño):
+
+| Distancia final a la mina | Tropas perdidas |
+|---|---|
+| encima / a 1 | **50%** |
+| a 2 | 40% |
+| a 3 | 30% |
+| a 4 | 20% |
+| a 5 | 10% |
+| a 6+ | 0% |
+
+- Cada enemigo que la cruza **gasta 1 carga**. Al agotar las **3 cargas**, la mina desaparece.
+- Solo afecta **si la cruzas** (está en tu ruta), no por acabar cerca sin pasar por ella.
+- Se aplica **igual en la redistribución**: si redistribuyes cruzando una mina enemiga, pierdes tropas con la misma regla.
+
+**Recuperar (regla del 6):** si el **dueño saca un 6**, **desmonta todas sus minas** y recupera **1 soldado por carga restante** (vuelven a esa casilla).
+
+---
+
 ## 🎁 Bono de captura
 
 Al tomar una posición (por conquista o ganando un combate) recibes tropas de refuerzo gratis según el tipo:
@@ -249,6 +274,9 @@ La partida termina en cuanto un comandante cumple **cualquiera** de estas:
 | Cartas brutales (opcional) | Van a tu **mano secreta**: 💣 bomba · 👑 victoria · 🏁 fin de partida (ataque, en tu turno) · 🛡️ super defensa (reactiva: aniquila a los atacantes) |
 | Fortificar (fase tras reforzar) | 5 tropas de la base → 1 escudo (≥10 tropas totales, base con ≥6; máx. 1/turno, 3/base) |
 | Asedio (base con escudos) | dado 1→−1 · 2-3→−2 · 4-6→−3; si queda alguno, repelido |
+| Minar (al caer en camino libre) | 3 soldados → mina de 3 cargas |
+| Daño de mina al cruzar (solo enemigos) | encima/1→50% · 2→40% · 3→30% · 4→20% · 5→10% |
+| Regla del 6 (dueño) | desmonta tus minas y recuperas 1 soldado por carga |
 | Bloqueo al cruzar | el ocupante deja pasar o bloquea (combate); online 15 s → bloquear |
 | Requisito para atacar el NÚCLEO | 3 bases satélite |
 | Victoria por NÚCLEO | 3 turnos propios |

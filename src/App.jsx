@@ -76,6 +76,8 @@ export default function App() {
     reinforceNode,
     placeShield,
     skipFortify,
+    placeMine,
+    mineableNode,
     getTotalTroops,
     endTurn,
     executeConquestRoll,
@@ -1113,6 +1115,16 @@ export default function App() {
           {/* Live scoreboard: who's winning (always visible) */}
           {gameStarted && phase !== 'GAME_OVER' && (
             <Scoreboard players={players} boardState={boardState} getBasesCount={getBasesCount} currentTurn={currentTurn} />
+          )}
+
+          {/* Landed on a free road cell → offer to mine it (−3 → mina de 3 cargas). */}
+          {gameStarted && phase !== 'GAME_OVER' && isMyTurn && !players[currentTurn]?.isBot && mineableNode && !combatState && !conquestState && !surpriseState && !siegeState && !negotiationState && !bombState && !defenseState && (
+            <button
+              onClick={() => placeMine(mineableNode)}
+              className="w-full shrink-0 btn-tactical border-orange-400 text-orange-300 bg-orange-950/30 hover:bg-orange-500/20 font-bold text-xs py-2 flex items-center justify-center gap-2 animate-pulse"
+            >
+              💣 Minar esta casilla (−3 soldados · mina de 3 cargas)
+            </button>
           )}
 
           {/* Online: spectator banner when it's not your turn (+ nudge button) */}

@@ -32,6 +32,45 @@ export function buildSurpriseDeck(brutal) {
   return deck; // 21 troops + 4 brutal = 25 → brutal ≈ 16%
 }
 
+// ── Minas ──
+export const MINE_CHARGES = 3;   // cargas por mina (1 por soldado gastado)
+export const MINE_COST = 3;      // soldados para colocar una mina
+
+// % de tropas perdidas al CRUZAR una mina, según lo cerca que ACABES de ella
+// (distancia a lo largo del recorrido). Cerca = más daño.
+export function minePct(distance) {
+  return Math.max(0, Math.min(50, (6 - distance) * 10)); // 0-1→50, 2→40, 3→30, 4→20, 5→10, 6+→0
+}
+
+// Aplica las minas ENEMIGAS cruzadas a lo largo de `path` (índice 0 = origen).
+// Una mina en el índice i detona si su dueño ≠ moverFaction; la pérdida depende
+// de la distancia a la casilla FINAL. Devuelve un tablero NUEVO (cargas gastadas
+// / minas retiradas), tropas supervivientes, líneas de log y si el pelotón muere.
+export function applyMinesOnPath(board, graph, path, moverFaction, force) {
+  let b = board;
+  let t = force;
+  const logs = [];
+  let annihilated = false;
+  const last = path.length - 1;
+  for (let i = 1; i <= last; i++) {          // incluye el destino, salta el origen
+    const cid = path[i];
+    const mine = b[cid]?.mine;
+    if (!mine || mine.charges <= 0 || mine.owner === moverFaction) continue;
+    const pct = minePct(last - i);
+    if (pct <= 0) continue;                   // demasiado lejos → ni daño ni carga
+    const loss = Math.min(t, Math.round((t * pct) / 100));
+    const nextCharges = mine.charges - 1;
+    const cell = { ...b[cid] };
+    if (nextCharges > 0) cell.mine = { ...mine, charges: nextCharges };
+    else delete cell.mine;
+    b = { ...b, [cid]: cell };
+    t -= loss;
+    logs.push(`💥 MINA en ${graph[cid]?.name ?? 'la casilla'}: −${loss} tropas (${pct}%).`);
+    if (t <= 0) { annihilated = true; break; }
+  }
+  return { board: b, troops: Math.max(0, t), logs, annihilated };
+}
+
 // Human-readable card info (for hand UI / logs)
 export const CARD_INFO = {
   bomb: { icon: '💣', name: 'Bomba atómica', kind: 'attack' },
@@ -106,6 +145,8 @@ export function useGameState(online = null) {
 
   // Shields: max 1 purchase per turn
   const [shieldPurchasedThisTurn, setShieldPurchasedThisTurn] = useState(false);
+  // The free cell you just landed on this move — can be mined (−3 → mina de 3 cargas).
+  const [mineableNode, setMineableNode] = useState(null);
 
   // Add a message to the tactical console log
   const addLog = useCallback((message, type = 'info') => {
@@ -179,6 +220,7 @@ export function useGameState(online = null) {
     setPhase('RECRUIT');
     setGameStarted(true);
     setShieldPurchasedThisTurn(false);
+    setMineableNode(null);
     setHands({});
     setWinner(null);
     setAlliances([]);
@@ -281,6 +323,31 @@ export function useGameState(online = null) {
     const nameB = FACTIONS[factionB].name.split(' ')[0];
     addLog(`💔 TRAICIÓN: ${nameA} ha roto la alianza con ${nameB}. ¡La guerra recomienza!`, 'error');
   }, [addLog]);
+
+  // Place a mine on the free/own non-base cell you just landed on (−3 → 3 cargas).
+  const placeMine = useCallback((nodeId) => {
+    const cp = players[currentTurn];
+    const s = boardState[nodeId];
+    const n = graph[nodeId];
+    if (!s || !n) return;
+    if (['hq', 'neutral', 'center'].includes(n.type)) { addLog('Solo se pueden minar casillas de camino (no bases).', 'error'); return; }
+    if (s.occupyingFaction !== cp.faction) { addLog('Solo puedes minar una casilla que ocupes.', 'error'); return; }
+    if (s.mine) { addLog('Esta casilla ya tiene una mina.', 'error'); return; }
+    if ((s.troops || 0) < MINE_COST) { addLog(`Necesitas al menos ${MINE_COST} tropas para minar.`, 'error'); return; }
+    const remaining = s.troops - MINE_COST;
+    setBoardState({
+      ...boardState,
+      [nodeId]: {
+        ...s,
+        troops: remaining,
+        occupyingFaction: remaining <= 0 ? null : cp.faction, // 0 tropas → campo minado sin guarnición
+        mine: { owner: cp.faction, charges: MINE_CHARGES },
+      },
+    });
+    setMineableNode(null);
+    addLog(`💣 ${cp.name.toUpperCase()} coloca una MINA (${MINE_CHARGES} cargas) en ${n.name}. −${MINE_COST} tropas.`, 'success');
+    SoundManager.playClick?.();
+  }, [players, currentTurn, boardState, graph, addLog]);
 
   // Count strategic bases (HQ + neutral + center) controlled by faction
   const countStrategicBases = useCallback((faction, currentBoard) => {
@@ -444,6 +511,7 @@ export function useGameState(online = null) {
     setHighlightedNodes([]);
     setPhase('RECRUIT');
     setShieldPurchasedThisTurn(false);
+    setMineableNode(null);
 
     const nextPlayer = players[nextIdx];
     const recruits = getBasesControlledCount(nextPlayer.faction);
@@ -553,8 +621,30 @@ export function useGameState(online = null) {
     setDiceRoll(roll);
     addLog(`DADO TÁCTICO: Resultado del despliegue = ${roll}.`, 'info');
 
-    // Check if the current player has any valid moves
     const currentPlayer = players[currentTurn];
+
+    // REGLA DEL 6 (minas): al sacar un 6, el dueño desmonta TODAS sus minas y
+    // recupera 1 soldado por carga restante (vuelven a esa casilla).
+    if (roll === 6) {
+      let recovered = 0, count = 0;
+      const nb = { ...boardState };
+      Object.keys(nb).forEach((id) => {
+        const c = nb[id];
+        if (c?.mine && c.mine.owner === currentPlayer.faction) {
+          count += 1; recovered += c.mine.charges;
+          const cell = { ...c, troops: (c.troops || 0) + c.mine.charges };
+          delete cell.mine;
+          if (cell.troops > 0 && cell.occupyingFaction === null) cell.occupyingFaction = currentPlayer.faction;
+          nb[id] = cell;
+        }
+      });
+      if (count > 0) {
+        setBoardState(nb);
+        addLog(`💣➡️ REGLA DEL 6: ${currentPlayer.name} desmonta ${count} mina(s) y recupera ${recovered} soldados.`, 'success');
+      }
+    }
+
+    // Check if the current player has any valid moves
     let hasValidMove = false;
 
     Object.keys(boardState).forEach(nodeId => {
@@ -749,7 +839,7 @@ export function useGameState(online = null) {
     }
 
     const remaining = originState.troops - troops;
-    const board = {
+    let board = {
       ...boardState,
       [originId]: {
         ...originState,
@@ -758,18 +848,38 @@ export function useGameState(online = null) {
       },
     };
 
+    // Enemy mines crossed on the way detonate (the owner passes free; allies suffer).
+    let force = troops;
+    const minePath = findShortestPath(graph, originId, destId) || [originId, destId];
+    const mineRes = applyMinesOnPath(board, graph, minePath, cp.faction, force);
+    board = mineRes.board; force = mineRes.troops;
+    mineRes.logs.forEach((l) => addLog(l, 'error'));
+    if (mineRes.annihilated || force <= 0) {
+      setBoardState(board);
+      setMineableNode(null);
+      addLog(`☠️ El pelotón de ${cp.name} fue ANIQUILADO por las minas antes de llegar a ${destNode.name}.`, 'error');
+      resolvePostMovement(board);
+      return;
+    }
+
     // Empty or friendly destination
     if (destState.occupyingFaction === null || destState.occupyingFaction === cp.faction) {
       if ((destNode.type === 'center' || destNode.type === 'neutral') && destState.occupyingFaction === null) {
         setBoardState(board);
-        initConquest(destId, troops, originId);
+        setMineableNode(null);
+        initConquest(destId, force, originId);
       } else {
         board[destId] = {
           ...destState,
           occupyingFaction: cp.faction,
-          troops: (destState.occupyingFaction === cp.faction ? destState.troops : 0) + troops,
+          troops: (destState.occupyingFaction === cp.faction ? destState.troops : 0) + force,
         };
         setBoardState(board);
+        // Landing on a FREE road cell → offer to mine it (−3 → mina de 3 cargas).
+        setMineableNode(
+          (destState.occupyingFaction === null && destNode.type === 'path' && !destState.mine && force >= MINE_COST)
+            ? destId : null
+        );
         addLog(`${cp.name.toUpperCase()} desplazó pelotón a ${destNode.name}.`, 'info');
         if (destNode.type === 'surprise') {
           setPhase('SURPRISE');
@@ -782,8 +892,9 @@ export function useGameState(online = null) {
     }
 
     // Enemy destination
+    setMineableNode(null);
     if (destState.troops <= 0) {
-      board[destId] = { occupyingFaction: cp.faction, troops, isSieged: false, shields: 0 };
+      board[destId] = { occupyingFaction: cp.faction, troops: force, isSieged: false, shields: 0 };
       setBoardState(board);
       addLog(`${cp.name.toUpperCase()} tomó ${destNode.name} sin resistencia.`, 'info');
       resolvePostMovement(board);
@@ -799,7 +910,7 @@ export function useGameState(online = null) {
       const deadline = (isOnline && !defender?.isBot) ? Date.now() + 15000 : null;
       setPhase('DEFENSE');
       setDefenseState({
-        originId, destId, troops, continueTo,
+        originId, destId, troops: force, continueTo,
         siege: (destState.shields || 0) > 0,
         defenderFaction: destState.occupyingFaction,
         deadline, response: null,
@@ -808,9 +919,9 @@ export function useGameState(online = null) {
       return;
     }
     if (destIsBase && (destState.shields || 0) > 0) {
-      initSiege(originId, destId, troops); // fortified → siege first
+      initSiege(originId, destId, force); // fortified → siege first
     } else {
-      initCombat(originId, destId, troops, continueTo);
+      initCombat(originId, destId, force, continueTo);
     }
   }, [players, currentTurn, boardState, graph, hands, isOnline, findCrossingConflict, initNegotiation, initConquest, initCombat, initSiege, resolvePostMovement, addLog, drawSurpriseCard]);
 
@@ -891,7 +1002,7 @@ export function useGameState(online = null) {
         const maxFromOrigin = isOriginBase ? originState.troops - 1 : originState.troops;
         const moveTroops = customTroops !== null ? Math.min(Math.max(1, customTroops), maxFromOrigin) : maxFromOrigin;
         const remainingRedist = originState.troops - moveTroops;
-        const newBoard = {
+        let newBoard = {
           ...boardState,
           [selectedNode]: {
             ...originState,
@@ -899,10 +1010,16 @@ export function useGameState(online = null) {
             // Path/surprise nodes with 0 troops become neutral (free)
             occupyingFaction: (['path', 'surprise'].includes(graph[selectedNode]?.type) && remainingRedist <= 0) ? null : originState.occupyingFaction
           },
-          [nodeId]: { ...state, troops: state.troops + moveTroops }
         };
+        // Enemy mines on the redistribution route detonate too (same rule).
+        const rpath = findShortestPath(graph, selectedNode, nodeId) || [selectedNode, nodeId];
+        const mr = applyMinesOnPath(newBoard, graph, rpath, currentPlayer.faction, moveTroops);
+        newBoard = mr.board;
+        mr.logs.forEach((l) => addLog(l, 'error'));
+        const arrived = mr.troops;
+        newBoard = { ...newBoard, [nodeId]: { ...newBoard[nodeId], troops: (newBoard[nodeId]?.troops || 0) + arrived } };
         setBoardState(newBoard);
-        addLog(`🔄 ${currentPlayer.name}: ${moveTroops} tropas de ${graph[selectedNode].name} → ${node.name}.`, 'info');
+        addLog(`🔄 ${currentPlayer.name}: ${moveTroops} tropas de ${graph[selectedNode].name} → ${node.name}${arrived < moveTroops ? ` (llegan ${arrived} tras las minas)` : ''}.`, 'info');
         SoundManager.playMove();
         setSelectedNode(null);
         setHighlightedNodes([]);
@@ -1789,6 +1906,8 @@ export function useGameState(online = null) {
     reinforceNode,
     placeShield,
     skipFortify,
+    placeMine,
+    mineableNode,
     getTotalTroops,
     endTurn,
     executeConquestRoll,
